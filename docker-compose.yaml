@@ -1,0 +1,41 @@
+services:
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aips_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://root:@host.docker.internal:3306/aips_db
+      BACKEND_URL: http://backend:8000
+      YOLO_CONF: "0.50"
+      IOU_THRESHOLD: "0.30"
+    volumes:
+      - ./backend/models:/backend/models
+      - ./backend/logs:/backend/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+ 
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_HOST: localhost:8000
+        NEXT_PUBLIC_LPR_HOST: localhost:8000
+        NEXT_PUBLIC_SLOT_HOST: localhost:8000
+    container_name: aips_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
