@@ -1,0 +1,8 @@
+names:
+- space-empty
+- space-occupied
+nc: 2
+test: test/images
+train: train/images
+val: valid/images
+path: /content/pklot

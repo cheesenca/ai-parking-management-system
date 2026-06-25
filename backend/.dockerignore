@@ -1,0 +1,19 @@
+# Python Virtual Environments
+venv/
+.venv/
+env/
+
+# Python Cache & Compiled Files 
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Large Media & Machine Learning Artifacts
+models/
+data/
+
+# Application Logs & Environment Secrets
+logs/
+.env
