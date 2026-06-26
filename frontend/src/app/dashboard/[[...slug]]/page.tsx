@@ -21,20 +21,21 @@ export default function DashboardPage({
 }: {
   params: Promise<{ slug?: string[] }>;
 }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth(); 
   const router = useRouter();
   const { slug } = use(params);
   const view = slug?.[0] ?? 'tracker';
   const View = VIEWS[view];
  
   useEffect(() => {
-    if (!user) router.replace('/');
-  }, [user, router]);
+    if (!loading && !user) router.replace('/');
+  }, [user, loading, router]);
  
   useEffect(() => {
     if (!View) router.replace('/dashboard/tracker');
   }, [View, router]);
  
+  if (loading) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
   if (!user || !View) return null;
  
   return (
@@ -46,4 +47,3 @@ export default function DashboardPage({
     </div>
   );
 }
- 

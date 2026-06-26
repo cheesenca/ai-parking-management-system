@@ -1,5 +1,4 @@
 services:
-  # FastAPI Backend
   backend:
     build:
       context: ./backend
@@ -23,7 +22,6 @@ services:
       retries: 5
       start_period: 30s
  
-  # Next.js Frontend
   frontend:
     build:
       context: ./frontend

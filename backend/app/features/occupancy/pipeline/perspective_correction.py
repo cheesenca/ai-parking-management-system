@@ -1,14 +1,17 @@
 from __future__ import annotations
-
 import sys
-from pathlib import Path
-from typing import Optional
-
 import cv2
 import numpy as np
+from pathlib import Path
+from typing import Optional
+from app.core.config import HOMOGRAPHY_SRC, HOMOGRAPHY_W, HOMOGRAPHY_H, HOMOGRAPHY_MATRIX
 
-# Bootstrap sys.path to find project modules regardless of execution CWD
+_M: Optional[np.ndarray] = None 
+
 def _bootstrap(f: str) -> None:
+    """
+    
+    """
     p = Path(f).resolve()
     feat = proj = None
     for parent in p.parents:
@@ -23,14 +26,11 @@ def _bootstrap(f: str) -> None:
             sys.path.insert(0, root)
 _bootstrap(__file__)
 
-from app.core.config import (
-    HOMOGRAPHY_SRC, HOMOGRAPHY_W, HOMOGRAPHY_H, HOMOGRAPHY_MATRIX
-)
-
-_M: Optional[np.ndarray] = None 
-
 
 def _dst_points() -> np.ndarray:
+    """
+    
+    """
     return np.float32([
         [0, 0],
         [HOMOGRAPHY_W, 0],

@@ -185,8 +185,8 @@ ALTER TABLE entry_exit_log ADD COLUMN IF NOT EXISTS zone_id BIGINT NULL AFTER ad
 SET @fk_exists = (
     SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
     WHERE CONSTRAINT_SCHEMA = DATABASE()
-      AND TABLE_NAME        = 'entry_exit_log'
-      AND CONSTRAINT_NAME   = 'fk_log_zone'
+      AND TABLE_NAME = 'entry_exit_log'
+      AND CONSTRAINT_NAME = 'fk_log_zone'
 );
 
 SET @sql = IF(@fk_exists = 0,
@@ -200,8 +200,8 @@ DEALLOCATE PREPARE stmt;
 SET @idx_exists = (
     SELECT COUNT(*) FROM information_schema.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME   = 'entry_exit_log'
-      AND INDEX_NAME   = 'idx_log_zone'
+      AND TABLE_NAME = 'entry_exit_log'
+      AND INDEX_NAME = 'idx_log_zone'
 );
 
 SET @sql2 = IF(@idx_exists = 0,
@@ -225,8 +225,8 @@ ALTER TABLE parking_slot
 SET @slot_col_type = (
     SELECT DATA_TYPE FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME   = 'parking_slot'
-      AND COLUMN_NAME  = 'coordinates_polygon'
+      AND TABLE_NAME = 'parking_slot'
+      AND COLUMN_NAME = 'coordinates_polygon'
 );
 
 SET @alter_poly = IF(
@@ -241,8 +241,8 @@ DEALLOCATE PREPARE stmt;
 SET @uq_exists = (
     SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
     WHERE CONSTRAINT_SCHEMA = DATABASE()
-      AND TABLE_NAME        = 'parking_slot'
-      AND CONSTRAINT_NAME   = 'uq_slot_label_zone'
+      AND TABLE_NAME = 'parking_slot'
+      AND CONSTRAINT_NAME = 'uq_slot_label_zone'
 );
 
 SET @sql3 = IF(@uq_exists = 0,

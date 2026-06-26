@@ -15,12 +15,14 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
   }, [det]);
 
   const status: Status = useMemo(() => {
+    if (lpr.conn !== 'live') return 'idle'; 
+
     if (!det) return 'idle';
     if (det.confidence < 0.7 || det.plate_detected === '???') return 'denied';
     if (det.member && det.member.registered_plant !== selectedZone &&
         det.member.registered_plant !== 'eastwest' && selectedZone !== 'eastwest') return 'wrong_loc';
     return 'granted';
-  }, [det, selectedZone]);
+  }, [det, selectedZone, lpr.conn]);
 
   const statusConfig: Record<Status, { label: string; color: string; bg: string; border: string; icon: typeof Camera }> = {
     idle: { label: 'Awaiting Vehicle', color: 'var(--muted)', bg: 'var(--bg)', border: 'var(--border)', icon: Camera },

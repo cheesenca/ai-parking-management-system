@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Member, Zone, Category } from '@/lib/types';
 import { apiGetMembers, apiCreateMember, apiUpdateMember, apiDeleteMember } from '@/lib/backendApi';
 import { Plus, Pencil, Trash2, X, Check, Search, Download, RefreshCw } from 'lucide-react';
@@ -82,7 +82,9 @@ export default function MembersPage() {
     }
   }, [activeZone, filterCat, search]);
 
-  useState(() => { void fetchMembers(); });
+  useEffect(() => {
+    void fetchMembers();
+  }, [fetchMembers]);
 
   const filtered = useMemo(() => data, [data]);
   const openAdd = () => { 
@@ -112,11 +114,18 @@ export default function MembersPage() {
       return;
     }
     setSaving(true); setFormError('');
+    const payload = { ...form };
+    (Object.keys(payload) as (keyof typeof payload)[]).forEach(k => {
+      if (payload[k] === '') {
+        delete payload[k]; 
+      }
+    });
+
     try {
       if (modal === 'add') {
-        await apiCreateMember(form);
+        await apiCreateMember(payload as any); 
       } else if (modal === 'edit' && editMember) {
-        await apiUpdateMember(editMember.member_id, form);
+        await apiUpdateMember(editMember.member_id, payload as any);
       }
       closeModal();
       void fetchMembers();

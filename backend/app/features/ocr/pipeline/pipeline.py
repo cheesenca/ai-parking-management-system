@@ -1,46 +1,34 @@
-"""
-AIPS Model — Main Inference Pipeline
-Combines YOLOv8 tracking + EasyOCR + direction detection into one
-callable function that the FastAPI server uses.
-
-Run standalone for testing:
-    python pipeline/pipeline.py
-"""
-
 from __future__ import annotations
 
 import cv2
-import numpy as np
 import easyocr
+import numpy as np
+from pathlib import Path
 from ultralytics import YOLO
 from datetime import datetime
 from collections import defaultdict
-from pathlib import Path
+from .direction_detector import DirectionDetector
+from .plate_utils import preprocess_plate, clean_plate_text, average_plate_readings
 
-from plate_utils import preprocess_plate, clean_plate_text, average_plate_readings
-from direction_detector import DirectionDetector
-
-# ── Paths ─────────────────────────────────────────────────────────────────────
-MODEL_DIR = Path(__file__).parent.parent / "models"
+# Paths 
+MODEL_DIR = Path("/backend/models")
 DETECTOR_PATH = MODEL_DIR / "parkwise_detector.pt"
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-CONF_THRESHOLD  = 0.70   # minimum OCR confidence for auto-grant
-YOLO_CONF       = 0.50   # minimum YOLO detection confidence
-TRIPWIRE_Y      = 320    # ← SET THIS per your camera. Run test_camera.py first.
+# Constants 
+CONF_THRESHOLD = 0.70
+YOLO_CONF = 0.50  
+TRIPWIRE_Y = 320    
 VEHICLE_CLASSES = ('car', 'motorcycle', 'truck', 'bus')
 
 
 class AIPSPipeline:
     """
-    Main pipeline class. Instantiate once and call process_frame() per frame.
-
-    If your trained model (parkwise_detector.pt) is not ready yet,
-    set use_pretrained=True to use the base YOLOv8 model which can
-    detect vehicles but not license plates specifically.
+    
     """
-
     def __init__(self, use_pretrained: bool = False):
+        """
+        
+        """
         print("[AIPS] Loading models...")
 
         # Load YOLO model
@@ -54,9 +42,11 @@ class AIPSPipeline:
             self.detector = YOLO(str(DETECTOR_PATH))
             self.has_plate_class = 'license_plate' in self.detector.names.values()
 
-        # Load EasyOCR (downloads language models on first run ~500MB)
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Load EasyOCR
         print("[AIPS]   EasyOCR — loading (first run downloads language models)...")
-        self.ocr = easyocr.Reader(['en', 'id'], gpu=False)
+        self.ocr = easyocr.Reader(['en', 'id'], gpu=False, download_enabled=True, model_storage_directory=str(MODEL_DIR))
         print("[AIPS]   EasyOCR ready")
 
         # Direction detector
@@ -67,66 +57,45 @@ class AIPSPipeline:
 
         print("[AIPS] Pipeline ready.\n")
 
+
     def process_frame(self, frame: np.ndarray) -> dict:
         """
-        Process one camera frame.
-
-        Returns:
-        {
-            'events':   list of detection events (one per vehicle crossing),
-            'vehicles': list of currently tracked vehicles in frame,
-            'frame':    annotated frame (numpy array),
-        }
-
-        Each event in 'events':
-        {
-            'plate':        str,
-            'confidence':   float (0.0–1.0),
-            'vehicle_type': str,
-            'event_type':   'entry' | 'exit',
-            'timestamp':    str (ISO format),
-            'status':       'detected' | 'low_confidence' | 'no_plate',
-        }
+        Process one camera frame
         """
         events   = []
         vehicles = []
         annotated = frame.copy()
-
         h, w = frame.shape[:2]
 
-        # ── Draw tripwire ──────────────────────────────────────────────────────
+        # Draw tripwire 
         cv2.line(annotated, (0, TRIPWIRE_Y), (w, TRIPWIRE_Y), (0, 255, 255), 2)
         cv2.putText(annotated, "GATE LINE", (10, TRIPWIRE_Y - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
-        # ── Run YOLO with tracking ─────────────────────────────────────────────
-        results = self.detector.track(frame, persist=True, conf=YOLO_CONF,
-                                      verbose=False)[0]
-
+        # Run YOLO with tracking
+        results = self.detector.track(frame, persist=True, conf=YOLO_CONF, verbose=False)[0]
         if results.boxes.id is None:
             return {'events': [], 'vehicles': [], 'frame': annotated}
 
         active_ids = set()
-
         for box in results.boxes:
-            track_id  = int(box.id[0])
-            cls_id    = int(box.cls[0])
-            det_conf  = float(box.conf[0])
-            label     = self.detector.names[cls_id]
+            track_id = int(box.id[0])
+            cls_id = int(box.cls[0])
+            det_conf = float(box.conf[0])
+            label = self.detector.names[cls_id]
             x1,y1,x2,y2 = [int(v) for v in box.xyxy[0].tolist()]
             cx = (x1 + x2) / 2
             cy = (y1 + y2) / 2
 
             active_ids.add(track_id)
 
-            # ── Vehicle tracks ────────────────────────────────────────────────
+            # Vehicle tracks
             if label in VEHICLE_CLASSES:
                 # Check direction crossing
                 direction = self.direction_detector.update(track_id, cx, cy)
-
                 # Run OCR when vehicle is near the tripwire
-                plate_text  = None
-                ocr_conf    = 0.0
+                plate_text = None
+                ocr_conf = 0.0
 
                 if self.direction_detector.is_near_tripwire(cy):
                     plate_result = self._run_ocr(frame, x1, y1, x2, y2, results)
@@ -142,33 +111,31 @@ class AIPSPipeline:
                 if direction:
                     final_plate = average_plate_readings(self.plate_buffer.get(track_id, []))
                     status = (
-                        'detected'        if final_plate and ocr_conf >= CONF_THRESHOLD else
-                        'low_confidence'  if final_plate else
+                        'detected' if final_plate and ocr_conf >= CONF_THRESHOLD else
+                        'low_confidence' if final_plate else
                         'no_plate'
                     )
                     events.append({
-                        'plate':        final_plate or '',
-                        'confidence':   round(ocr_conf, 3),
+                        'plate': final_plate or '',
+                        'confidence': round(ocr_conf, 3),
                         'vehicle_type': label,
-                        'event_type':   direction,
-                        'timestamp':    datetime.now().isoformat(),
-                        'status':       status,
-                        'track_id':     track_id,
+                        'event_type': direction,
+                        'timestamp': datetime.now().isoformat(),
+                        'status': status,
+                        'track_id': track_id,
                     })
                     # Clear buffer after event fires
                     self.plate_buffer.pop(track_id, None)
-                    print(f"[EVENT] {direction.upper()} | {label} | "
-                          f"plate={final_plate or '?'} | conf={ocr_conf:.0%} | {status}")
-
+                    print(f"[EVENT] {direction.upper()} | {label} | " f"plate={final_plate or '?'} | conf={ocr_conf:.0%} | {status}")
                 vehicles.append({
-                    'track_id':     track_id,
+                    'track_id': track_id,
                     'vehicle_type': label,
-                    'bbox':         [x1, y1, x2, y2],
-                    'centroid':     (cx, cy),
-                    'det_conf':     round(det_conf, 2),
+                    'bbox': [x1, y1, x2, y2],
+                    'centroid': (cx, cy),
+                    'det_conf': round(det_conf, 2),
                 })
 
-                # ── Annotate frame ────────────────────────────────────────────
+                # Annotate frame
                 color = (0, 255, 0) if direction == 'entry' else \
                         (0, 0, 255) if direction == 'exit'  else (255, 165, 0)
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
@@ -187,8 +154,7 @@ class AIPSPipeline:
                              (int(trail[i-1][0]), int(trail[i-1][1])),
                              (int(trail[i][0]),   int(trail[i][1])),
                              (200, 200, 200), 1)
-
-            # ── Plate box (if model has plate class) ──────────────────────────
+            # Plate box (if model has plate class)
             elif label == 'license_plate':
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 255, 0), 2)
 
@@ -203,14 +169,12 @@ class AIPSPipeline:
 
         return {'events': events, 'vehicles': vehicles, 'frame': annotated}
 
+
     def _run_ocr(self, frame, vx1, vy1, vx2, vy2, results) -> tuple[str, float] | None:
         """
-        Finds the plate crop and runs EasyOCR on it.
-        Prefers a dedicated license_plate detection box if available,
-        falls back to the bottom 30% of the vehicle bounding box.
+        
         """
         plate_crop = None
-
         # Try to find a plate box from YOLO
         if self.has_plate_class:
             for box in results.boxes:
@@ -234,14 +198,14 @@ class AIPSPipeline:
         if not ocr_out:
             return None
 
-        best       = max(ocr_out, key=lambda x: x[2])
+        best = max(ocr_out, key=lambda x: x[2])
         plate_text = clean_plate_text(best[1])
         confidence = best[2]
 
         return (plate_text, confidence) if plate_text else None
 
 
-# ── Standalone test ────────────────────────────────────────────────────────────
+# Standalone test
 if __name__ == '__main__':
     import sys
 

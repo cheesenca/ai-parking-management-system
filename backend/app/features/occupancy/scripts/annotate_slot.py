@@ -1,17 +1,19 @@
 from __future__ import annotations
-
-import argparse
+import sys
+import cv2
 import json
 import string
-import sys
+import argparse
+import numpy as np
 from pathlib import Path
 from typing import Optional
+from app.core.config import PARKING_MAP_JSON
 
-import cv2
-import numpy as np
 
-# Bootstrap sys.path to find project modules regardless of execution CWD
 def _bootstrap(f: str) -> None:
+    """
+    
+    """
     p = Path(f).resolve()
     feat = proj = None
     for parent in p.parents:
@@ -27,14 +29,17 @@ def _bootstrap(f: str) -> None:
 _bootstrap(__file__)
 
 
-from app.core.config import PARKING_MAP_JSON
-
-
 def _slot_label(idx: int) -> str:
+    """
+    
+    """
     return f"{string.ascii_uppercase[idx % 26]}{idx // 26 + 1}"
 
 
 def _load_ref(args: argparse.Namespace) -> np.ndarray:
+    """
+    
+    """
     if args.image:
         f = cv2.imread(str(args.image))
         if f is None:
@@ -57,6 +62,9 @@ def run_annotator(
     camera_id: str = "CAM_WEST_01",
     save_path: Path = PARKING_MAP_JSON,
 ) -> Optional[dict]:
+    """
+    
+    """
     slots = []
     wip = []
     mouse_pos = [(0, 0)]
@@ -79,6 +87,9 @@ def run_annotator(
 
 
     def render() -> np.ndarray:
+        """
+        
+        """
         out = reference.copy()
         for s in slots:
             pts = np.array(s["polygon"], np.int32)
@@ -97,6 +108,9 @@ def run_annotator(
         return out
 
     def auto_grid():
+        """
+        
+        """
         slots.clear()
         fh, fw = reference.shape[:2]
         cols = max(1, grid_cols[0])

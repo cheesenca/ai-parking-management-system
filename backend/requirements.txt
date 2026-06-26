@@ -10,3 +10,11 @@ requests
 ultralytics
 python-jose[cryptography]
 passlib[bcrypt]
+easyocr
+torch
+torchvision
+shapely
+python-multipart
+pillow
+python-dotenv
+websockets

@@ -1,13 +1,10 @@
-"""
-AIPS Model — Camera Test
-Run this to confirm your webcam/camera is accessible before building the pipeline.
-Press Q to quit.
-"""
-
 import cv2
 import sys
 
 def test_camera(index: int = 0):
+    """
+    
+    """
     print(f"Opening camera index {index}...")
     cap = cv2.VideoCapture(index)
 
@@ -16,9 +13,9 @@ def test_camera(index: int = 0):
         print("  Try a different index: python pipeline/test_camera.py 1")
         sys.exit(1)
 
-    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps    = cap.get(cv2.CAP_PROP_FPS)
+    fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"✓ Camera opened — {width}x{height} @ {fps:.0f}fps")
     print("  Press Q to quit.")
 

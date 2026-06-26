@@ -1,15 +1,30 @@
 from __future__ import annotations
-
-import json
 import sys
+import cv2
+import json
+import numpy as np
 from pathlib import Path
 from typing import Dict, List
+from app.core.config import (
+    YOLO_MODEL_PATH, 
+    YOLO_BASE_MODEL,
+    YOLO_CONF, 
+    YOLO_IOU_NMS, 
+    YOLO_DEVICE, 
+    YOLO_IMGSZ,
+    VEHICLE_CLASSES, 
+    IOU_THRESHOLD,
+    PARKING_MAP_JSON, 
+    FEATURE_ROOT,
+)
 
-import cv2
-import numpy as np
+CAPACITY_CONFIG_JSON = FEATURE_ROOT / "data" / "capacity_config.json" 
+_yolo = None
 
-# Dynamic sys.path insertion to allow absolute imports from feature root and project root
 def _bootstrap(f: str) -> None:
+    """
+    
+    """
     p = Path(f).resolve()
     feat = proj = None
     for parent in p.parents:
@@ -23,16 +38,6 @@ def _bootstrap(f: str) -> None:
         if root not in sys.path:
             sys.path.insert(0, root)
 _bootstrap(__file__)
-
-from app.core.config import (
-    YOLO_MODEL_PATH, YOLO_BASE_MODEL,
-    YOLO_CONF, YOLO_IOU_NMS, YOLO_DEVICE, YOLO_IMGSZ,
-    VEHICLE_CLASSES, IOU_THRESHOLD,
-    PARKING_MAP_JSON, FEATURE_ROOT,
-)
-
-CAPACITY_CONFIG_JSON = FEATURE_ROOT / "data" / "capacity_config.json" 
-
 
 
 def load_capacity_config(path: Path = CAPACITY_CONFIG_JSON) -> dict:
@@ -93,7 +98,6 @@ def get_category_summary(
 
     return summary
 
-_yolo = None
 
 def _get_yolo():
     """
