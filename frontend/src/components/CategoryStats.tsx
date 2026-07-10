@@ -17,33 +17,36 @@ export default function CategoryStats({ slots }: { slots: any }) {
   const categories: Category[] = ['Employee', 'Vendor', 'Visitor'];
 
   return (
-    <div className="card" style={{ padding: 18 }}>
-      <div className="card-title" style={{ marginBottom: 14 }}>Available Slots by Category</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+    <div className="card" style={{ padding: 24 }}> {/* Padding diperbesar dari 18 ke 24 */}
+      <div className="card-title" style={{ marginBottom: 18, fontSize: 14 }}>Available Slots by Category</div>
+      
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
         {categories.map((cat) => {
           const info = slots.summary[cat] || { used: 0, total: 0, available: 0, rate_pct: 0 };
           return (
-            <div key={cat} style={{ textAlign: 'center', padding: '14px 8px', borderRadius: 10, background: catBg(info.used, info.total), border: `1px solid ${catBorder(info.used, info.total)}` }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: catColor(info.used, info.total) }}>{info.available}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: catColor(info.used, info.total), marginTop: 3 }}>{cat}</div>
-              <div style={{ fontSize: 10, color: catColor(info.used, info.total), opacity: .75, marginTop: 1 }}>{info.used}/{info.total} used</div>
+            <div key={cat} style={{ textAlign: 'center', padding: '18px 12px', borderRadius: 12, background: catBg(info.used, info.total), border: `1px solid ${catBorder(info.used, info.total)}` }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: catColor(info.used, info.total) }}>{info.available}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: catColor(info.used, info.total), marginTop: 4 }}>{cat}</div>
+              <div style={{ fontSize: 11, color: catColor(info.used, info.total), opacity: .8, marginTop: 2 }}>{info.used}/{info.total} used</div>
             </div>
           );
         })}
       </div>
-      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+      <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {categories.map((cat) => {
           const info = slots.summary[cat] || { used: 0, total: 0, available: 0, rate_pct: 0 };
           const pct = info.total ? Math.round((info.used / info.total) * 100) : 0;
           const color = pct > 85 ? 'var(--red)' : pct > 65 ? 'var(--amber)' : 'var(--teal)';
           return (
             <div key={cat}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
                 <span style={{ fontWeight: 600 }}>{cat}</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{pct}%</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{pct}%</span>
               </div>
-              <div style={{ height: 5, borderRadius: 3, background: 'var(--border)' }}>
-                <div style={{ height: '100%', borderRadius: 3, width: `${pct}%`, background: color, transition: 'width .5s' }} />
+              {/* Progress bar dipertebal dari 5px menjadi 8px */}
+              <div style={{ height: 8, borderRadius: 4, background: 'var(--border)' }}>
+                <div style={{ height: '100%', borderRadius: 4, width: `${pct}%`, background: color, transition: 'width .5s' }} />
               </div>
             </div>
           );

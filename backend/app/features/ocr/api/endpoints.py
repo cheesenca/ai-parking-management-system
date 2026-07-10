@@ -11,16 +11,14 @@ from app.core.database import get_db, SessionLocal
 from app.core.models import EntryExitLog, ParkingSession, ParkingZone, Vehicle
 
 # Router 
-router = APIRouter(prefix="/api/ocr", tags=["OCR License Plate"])
+router = APIRouter()
 ws_router = APIRouter(tags=["WebSocket"])
 
 # Lazy-load AIPS pipeline
 _pipeline_instance = None
 
+# Bootstrap sys.path
 def _bootstrap(f: str) -> None:
-    """
-    
-    """
     p = Path(f).resolve()
     proj = None
     for parent in p.parents:
@@ -37,7 +35,7 @@ _bootstrap(__file__)
 
 def _get_pipeline():
     """
-    
+    Retrieve the singleton instance of AIPSPipeline
     """
     global _pipeline_instance
     if _pipeline_instance is not None:
@@ -51,10 +49,10 @@ def _get_pipeline():
         print(f"[OCR WS] Pipeline unavailable: {exc}")
         return None
 
-#
+
 def save_ocr_event_to_db(event_data: dict, gate_type: str):
-    """\
-        
+    """
+    Storing automatic OCR detection event data from the camera stream to a database    
     """
     db = SessionLocal()
     try:
@@ -109,7 +107,6 @@ def save_ocr_event_to_db(event_data: dict, gate_type: str):
                 current_session_id = active_session.session_id
                 db.commit()
 
-        # 
         db.add(EntryExitLog(
             zone_id=zone.zone_id,
             session_id=current_session_id,
@@ -134,7 +131,7 @@ async def camera_websocket(
     gate_type: Optional[str] = Query(default=None),
 ):
     """
-    WebSocket untuk live vehicle detection
+    WebSocket for vehicle live detection
     """
     await websocket.accept()
     loop = asyncio.get_event_loop()
@@ -145,14 +142,12 @@ async def camera_websocket(
         await websocket.close()
         return
 
-    # 
     import cv2
     if camera_index.isdigit():
         source = int(camera_index)
     else:
         source = camera_index
 
-    # 
     cap = await loop.run_in_executor(None, lambda: cv2.VideoCapture(source))
     use_real_camera = cap.isOpened()
     if not use_real_camera:
@@ -166,14 +161,11 @@ async def camera_websocket(
         while True:
             ret, frame = await loop.run_in_executor(None, cap.read)
             if not ret:
-                print("[OCR WS] Gagal membaca frame dari sumber (Kamera mati / Video selesai). Terputus.")
+                print("[OCR WS]Failed to read frame from source (Camera off / Video ended), Disconnected")
                 break
             output = await loop.run_in_executor(None, pipeline.process_frame, frame)
 
             def _encode():
-                """
-                
-                """
                 _, buf = cv2.imencode(
                     ".jpg", output["frame"], [cv2.IMWRITE_JPEG_QUALITY, 65]
                 )
@@ -199,7 +191,7 @@ async def camera_websocket(
                 loop.run_in_executor(None, save_ocr_event_to_db, e, gate_type)
 
             await websocket.send_json(payload)
-            await asyncio.sleep(0.05)   # ~20 fps
+            await asyncio.sleep(0.05) 
     except WebSocketDisconnect:
         print("[OCR WS] Client disconnected.")
     finally:
@@ -214,7 +206,7 @@ def process_scanned_plate(
     db: Session = Depends(get_db),
 ):
     """
-    
+    Manually processing gate entries—for example, when a user taps in with a card or QR code, or performs a manual scan that immediately transmits license plate information
     """
     zone = db.query(ParkingZone).filter(ParkingZone.zone_id == zone_id).first()
     if not zone:
@@ -243,7 +235,62 @@ def process_scanned_plate(
     db.commit()
 
     return {
-        "message":    f"Plate {event_type.lower()} logged successfully",
-        "plate":      plate_number,
+        "message": f"Plate {event_type.lower()} logged successfully",
+        "plate": plate_number,
         "event_type": event_type,
     }
+
+
+def process_ocr_gate_event(plate_num: str, confidence: float, event_type: str, zone_key: str):
+    """
+    Process vehicles at entry/exit gates using OCR results and automatically synchronize them with the database
+    """
+    db = SessionLocal()
+    try:
+        vehicle = db.query(Vehicle).filter(Vehicle.plate_number == plate_num).first()
+        zone = db.query(ParkingZone).filter(ParkingZone.zone_key == zone_key).first()
+        zone_id = zone.zone_id if zone else 1
+        
+        if event_type == "Entry":
+            new_session = ParkingSession(
+                vehicle_id=vehicle.vehicle_id if vehicle else None,
+                zone_id=zone_id,
+                status="IN"
+            )
+            db.add(new_session)
+            db.flush() 
+            log = EntryExitLog(
+                session_id=new_session.session_id,
+                zone_id=zone_id,
+                event_type="Entry",
+                plate_detected=plate_num,
+                confidence_score=confidence,
+                auth_method="AI_LPR"
+            )
+            db.add(log)
+        elif event_type == "Exit":
+            if vehicle:
+                session = db.query(ParkingSession).filter(
+                    ParkingSession.vehicle_id == vehicle.vehicle_id,
+                    ParkingSession.status == "IN"
+                ).first()
+                
+                if session:
+                    session.status = "OUT"
+                    session.exit_time = datetime.now()
+                    log = EntryExitLog(
+                        session_id=session.session_id,
+                        zone_id=zone_id,
+                        event_type="Exit",
+                        plate_detected=plate_num,
+                        confidence_score=confidence,
+                        auth_method="AI_LPR"
+                    )
+                    db.add(log)
+        db.commit()
+        return {"status": "success", "message": f"Event {event_type} processed for {plate_num}"}
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()

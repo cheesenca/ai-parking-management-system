@@ -1,20 +1,21 @@
 from __future__ import annotations
 import sys
+import asyncio
+import base64
 import requests
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
+from ultralytics import YOLO
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.core.models import EntryExitLog, OccupancySnapshot, ParkingSlot, ParkingZone, ParkingSession
 from app.features.occupancy.schemas.slots import CategoryInfo, DetectionEvent, SlotItem, ZoneUpdate
 
+# Bootstrap sys.path
 def _bootstrap(f: str) -> None:
-    """
-    
-    """
     p = Path(f).resolve()
     proj = None
     for parent in p.parents:
@@ -23,9 +24,205 @@ def _bootstrap(f: str) -> None:
             break
     if proj and str(proj) not in sys.path:
         sys.path.insert(0, str(proj))
-
 _bootstrap(__file__)
-router = APIRouter(prefix="/api/slots", tags=["Parking Slots"])
+
+router = APIRouter()
+ws_router = APIRouter(tags=["WebSocket"])
+
+# Slot layout mirrors frontend's slotData.ts grid (W1-1..W4-5 / E1-1..E4-5)
+def _build_layout(prefix: str) -> list[dict]:
+    layout: list[dict] = []
+    for c in range(1, 11): layout.append({"id": f"{prefix}1-{c}", "category": "Employee"})
+    for c in range(1, 11): layout.append({"id": f"{prefix}2-{c}", "category": "Employee"})
+    for c in range(1, 9):  layout.append({"id": f"{prefix}3-{c}", "category": "Vendor"})
+    for c in range(1, 6):  layout.append({"id": f"{prefix}4-{c}", "category": "Visitor"})
+    return layout
+
+SLOT_LAYOUTS: dict[str, list[dict]] = {"west": _build_layout("W"), "east": _build_layout("E")}
+CATEGORY_TOTAL = {"Employee": 100, "Vendor": 20, "Visitor": 10}
+COLOR_AVAIL = (30, 200, 60)
+COLOR_OCC = (30, 60, 220)
+
+_slot_model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+def _get_slot_model():
+    """Lazily load and cache the YOLOv8 occupancy model (pklot.pt)."""
+    global _slot_model
+    if _slot_model is not None:
+        return _slot_model
+    try:
+        from ultralytics import YOLO
+        from app.core.config import OCCUPANCY_MODEL_PATH
+        _slot_model = YOLO(str(OCCUPANCY_MODEL_PATH))
+        print("[SLOT WS] Occupancy model loaded successfully")
+        return _slot_model
+    except Exception as exc:
+        print(f"[SLOT WS] Occupancy model unavailable: {exc}")
+        return None
+
+
+def _enhance(frame):
+    import cv2
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    l = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(l)
+    return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+
+
+def _draw_boxes(frame, dets: list[dict]):
+    import cv2
+    out = frame.copy()
+    for d in dets:
+        x1, y1, x2, y2 = int(d["x1"]), int(d["y1"]), int(d["x2"]), int(d["y2"])
+        color = COLOR_AVAIL if d["label"] == "Available" else COLOR_OCC
+        txt = f'{d["label"]} {d["conf"]:.0%}'
+        ov = out.copy()
+        cv2.rectangle(ov, (x1, y1), (x2, y2), color, -1)
+        cv2.addWeighted(ov, 0.25, out, 0.75, 0, out)
+        cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
+        (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(out, (x1, max(0, y1 - th - 8)), (x1 + tw + 6, y1), color, -1)
+        cv2.putText(out, txt, (x1 + 3, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    return out
+
+
+def _map_to_slots(dets: list[dict], layout: list[dict]) -> dict[str, str]:
+    """Spatially map YOLO detections (top-to-bottom, left-to-right) onto known slot IDs."""
+    status = {s["id"]: "Available" for s in layout}
+    ordered = sorted(dets, key=lambda d: ((d["y1"] + d["y2"]) / 2, (d["x1"] + d["x2"]) / 2))
+    for i, d in enumerate(ordered):
+        if i < len(layout):
+            status[layout[i]["id"]] = d["label"]
+    return status
+
+
+def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dict]) -> None:
+    """Write live detection results directly into the DB — same effect as POST /api/slots/update."""
+    id2cat = {s["id"]: s["category"] for s in layout}
+    db = SessionLocal()
+    try:
+        zone = db.query(ParkingZone).filter(ParkingZone.zone_key == zone_key).first()
+        if not zone:
+            return
+
+        used_by_cat: dict[str, int] = {}
+        for sid, st in status.items():
+            cat = id2cat.get(sid, "Employee")
+            slot = db.query(ParkingSlot).filter(
+                ParkingSlot.zone_id == zone.zone_id,
+                ParkingSlot.slot_label == sid,
+            ).first()
+            if slot:
+                slot.current_status = st
+                slot.category = cat
+            else:
+                db.add(ParkingSlot(
+                    zone_id=zone.zone_id, slot_label=sid, category=cat,
+                    current_status=st, coordinates_polygon=[],
+                ))
+            if st == "Occupied":
+                used_by_cat[cat] = used_by_cat.get(cat, 0) + 1
+
+        zone.employee_used = used_by_cat.get("Employee", 0)
+        zone.vendor_used = used_by_cat.get("Vendor", 0)
+        zone.visitor_used = used_by_cat.get("Visitor", 0)
+        zone.used_capacity = sum(used_by_cat.values())
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[SLOT WS] DB write failed: {e}")
+    finally:
+        db.close()
+
+
+# WebSocket /ws/slots
+@ws_router.websocket("/ws/slots")
+async def slots_camera_ws(
+    websocket: WebSocket,
+    zone: str = Query(default="west"),
+    camera_index: str = Query(default="0"),
+    conf: float = Query(default=0.25),
+):
+    """
+    Streams the parking-slot camera feed with live occupancy bounding boxes
+    (YOLOv8 / pklot.pt) and persists the detected status into the database,
+    so the existing GET /api/slots/live polling reflects it automatically.
+    """
+    await websocket.accept()
+    loop = asyncio.get_event_loop()
+
+    layout = SLOT_LAYOUTS.get(zone)
+    if not layout:
+        await websocket.send_json({"error": f"Unknown zone '{zone}'", "conn": "disconnected"})
+        await websocket.close()
+        return
+
+    model = await loop.run_in_executor(None, _get_slot_model)
+    if model is None:
+        await websocket.send_json({"error": "Occupancy model failed to load.", "conn": "disconnected"})
+        await websocket.close()
+        return
+
+    import cv2
+    source = int(camera_index) if camera_index.isdigit() else camera_index
+    cap = await loop.run_in_executor(None, lambda: cv2.VideoCapture(source))
+    if not cap.isOpened():
+        await websocket.send_json({"error": f"Camera/Video '{camera_index}' unavailable.", "conn": "disconnected"})
+        await websocket.close()
+        return
+
+    try:
+        last_push = 0.0
+        while True:
+            ret, frame = await loop.run_in_executor(None, cap.read)
+            if not ret:
+                print("[SLOT WS] Failed to read frame from source. Disconnected.")
+                break
+
+            def _infer():
+                enhanced = _enhance(frame)
+                h0, w0 = enhanced.shape[:2]
+                scale = 640 / w0
+                inf_f = cv2.resize(enhanced, (640, int(h0 * scale)))
+                results = model(inf_f, conf=conf, verbose=False)
+                dets: list[dict] = []
+                for box in (results[0].boxes or []):
+                    cls_id = int(box.cls[0])
+                    x1, y1, x2, y2 = [v / scale for v in box.xyxy[0].tolist()]
+                    dets.append({
+                        "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+                        "label": "Available" if cls_id == 0 else "Occupied",
+                        "conf": float(box.conf[0]),
+                    })
+                return dets
+
+            dets = await loop.run_in_executor(None, _infer)
+            status = _map_to_slots(dets, layout)
+
+            def _encode():
+                drawn = _draw_boxes(frame, dets)
+                _, buf = cv2.imencode(".jpg", drawn, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                return base64.b64encode(buf.tobytes()).decode()
+
+            frame_b64 = await loop.run_in_executor(None, _encode)
+
+            now = loop.time()
+            if now - last_push >= 0.5:
+                await loop.run_in_executor(None, _persist_slot_update, zone, status, layout)
+                last_push = now
+
+            occ = sum(1 for v in status.values() if v == "Occupied")
+            await websocket.send_json({
+                "frame": frame_b64,
+                "detections": len(dets),
+                "occupied": occ,
+                "available": len(layout) - occ,
+            })
+            await asyncio.sleep(0.05)
+    except WebSocketDisconnect:
+        print("[SLOT WS] Client disconnected.")
+    finally:
+        cap.release()
+
 
 
 # GET /api/slots/live?zone=west
@@ -35,7 +232,7 @@ def get_live_slots(
     db: Session = Depends(get_db)
 ):
     """
-    
+    Retrieve real-time parking slot occupancy status for a specific zone
     """
     parking_zone = (
         db.query(ParkingZone).filter(ParkingZone.zone_key == zone).first()
@@ -87,7 +284,7 @@ def update_parking_slots(
     db: Session = Depends(get_db)
 ):
     """
-    
+    Receives status updates for each parking slot from the AI ​​camera system (YOLO)
     """
     zone = db.query(ParkingZone).filter(ParkingZone.zone_key == payload.zone).first()
     if not zone:
@@ -150,22 +347,48 @@ def record_detection(
     db: Session = Depends(get_db)
 ):
     """
-    
+    Log gate entry/exit events while managing active parking sessions
     """
     zone = db.query(ParkingZone).filter(ParkingZone.zone_key == event.zone).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
 
-    db.add(EntryExitLog(
+    event_type = "Entry" if event.status == "Occupied" else "Exit"
+    new_log = EntryExitLog(
         zone_id=zone.zone_id,
-        event_type="Entry" if event.status == "Occupied" else "Exit",
+        event_type=event_type,
         plate_detected=event.plate,
         confidence_score=event.confidence,
         event_timestamp=datetime.fromisoformat(event.timestamp),
         auth_method="AI_LPR",
-    ))
+    )
+    db.add(new_log)
+
+    if event_type == "Entry":
+        session = ParkingSession(
+            zone_id=zone.zone_id,
+            plate_number=event.plate,
+            entry_time=datetime.fromisoformat(event.timestamp),
+            status="IN",
+            vehicle_type=getattr(event, 'vehicle_type', 'car')
+        )
+        db.add(session)
+    else:
+        active_session = (
+            db.query(ParkingSession)
+            .filter(
+                ParkingSession.plate_number == event.plate,
+                ParkingSession.status == "IN"
+            )
+            .order_by(ParkingSession.entry_time.desc())
+            .first()
+        )
+        if active_session:
+            active_session.status = "OUT"
+            active_session.exit_time = datetime.fromisoformat(event.timestamp)
+
     db.commit()
-    return {"message": "Detection event logged"}
+    return {"message": "Detection event logged and session synced successfully"}
 
 
 # GET /api/slots/logs
@@ -176,7 +399,7 @@ def get_logs(
     db: Session = Depends(get_db),
 ):
     """
-    
+    Retrieving historical vehicle entry and exit log data (Entry/Exit Log)
     """
     q = db.query(EntryExitLog)
     if zone:
@@ -195,7 +418,7 @@ def push_slot_update(
     parking_map: dict,
 ) -> bool:
     """
-    
+    Helper function for transmitting full slot status update data from the edge device or local camera script to the main backend server
     """
     id_to_cat = {s["id"]: s.get("category", "Employee") for s in parking_map["slots"]}
     payload = ZoneUpdate(
@@ -219,7 +442,7 @@ def push_slot_update(
 #
 def push_detection_event(zone: str, plate: str, confidence: float, status: str = "Occupied") -> bool:
     """
-    
+    Helper function for transmitting vehicle license plate reading events (LPR/OCR) to the backend API server
     """
     payload = DetectionEvent(
         zone=zone,

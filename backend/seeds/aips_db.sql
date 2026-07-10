@@ -72,11 +72,11 @@ CREATE TABLE IF NOT EXISTS parking_zone (
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS parking_slot (
     slot_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    zone_id BIGINT NOT NULL, 
     coordinates_polygon TEXT NOT NULL,
     slot_label VARCHAR(255) NOT NULL,
-    FOREIGN KEY (zone_id) REFERENCES parking_zone(zone_id)
+    FOREIGN KEY (zone_id) REFERENCES parking_zone(zone_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    FOREIGN KEY (zone_id) REFERENCES parking_zone(zone_id)
 
 -- --------------------------------------------------------
 
@@ -88,12 +88,13 @@ CREATE TABLE IF NOT EXISTS parking_session (
     session_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     vehicle_id BIGINT NOT NULL,
     zone_id BIGINT NOT NULL,
-    booking_reference VARCHAR(255) NULL,
+    entry_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
     exit_time DATETIME NULL,
+    booking_reference VARCHAR(255) NULL,
+    status ENUM('IN', 'OUT') NOT NULL DEFAULT 'IN',
     FOREIGN KEY (vehicle_id) REFERENCES vehicle(vehicle_id),
-    status ENUM('IN', 'OUT') NOT NULL,
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     FOREIGN KEY (zone_id) REFERENCES parking_zone(zone_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -105,13 +106,16 @@ CREATE TABLE IF NOT EXISTS entry_exit_log (
     log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     session_id BIGINT NULL,
     admin_id BIGINT NULL,
-    confidence_score FLOAT NULL,
+    zone_id BIGINT NOT NULL,
+    event_type ENUM('Entry', 'Exit', 'Denied') NOT NULL,
     plate_detected VARCHAR(255) NOT NULL,
     confidence_score FLOAT NULL,
-    FOREIGN KEY (session_id) REFERENCES parking_session(session_id),
+    event_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     auth_method ENUM('AI_LPR', 'KPK_Scan', 'Manual_Security') NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES parking_session(session_id) ON DELETE SET NULL,
+    FOREIGN KEY (admin_id) REFERENCES admin_user(admin_id) ON DELETE SET NULL,
+    FOREIGN KEY (zone_id) REFERENCES parking_zone(zone_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    FOREIGN KEY (admin_id) REFERENCES admin_user(admin_id)
 -- --------------------------------------------------------
 
 -- 
@@ -122,8 +126,9 @@ CREATE TABLE IF NOT EXISTS analytics_data (
     analytics_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     zone_id BIGINT NOT NULL,
     record_date DATE NOT NULL,
-    avg_occupancy_rate FLOAT NOT NULL,
+    peak_hour_start TIME NOT NULL, 
     peak_hour_end TIME NOT NULL,
+    avg_occupancy_rate FLOAT NOT NULL,
     FOREIGN KEY (zone_id) REFERENCES parking_zone(zone_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- --------------------------------------------------------
@@ -133,7 +138,7 @@ CREATE TABLE IF NOT EXISTS analytics_data (
 -- 
  
 -- 
--- parking_zone 
+-- Migration for table 'parking_zone' 
 -- 
 -- --------------------------------------------------------
 ALTER TABLE parking_zone
@@ -154,30 +159,17 @@ ALTER TABLE parking_zone
 
 SET @col_type = (
     SELECT DATA_TYPE FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'parking_zone'
-      AND COLUMN_NAME = 'camera_ids'
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parking_zone' AND COLUMN_NAME = 'camera_ids'
 );
+SET @alter_cam = IF(@col_type = 'text', 'ALTER TABLE parking_zone MODIFY COLUMN camera_ids JSON NULL', 'SELECT 1');
+PREPARE stmt FROM @alter_cam; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-SET @alter_cam = IF(
-    @col_type = 'text',
-    'ALTER TABLE parking_zone MODIFY COLUMN camera_ids JSON NULL',
-    'SELECT 1'
-);
-PREPARE stmt FROM @alter_cam;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-UPDATE parking_zone
-SET zone_key = LOWER(REPLACE(zone_name, ' ', '_'))
-WHERE zone_key IS NULL;
-
-ALTER TABLE parking_zone
-    MODIFY COLUMN zone_key VARCHAR(50) NOT NULL;
+UPDATE parking_zone SET zone_key = LOWER(REPLACE(zone_name, ' ', '_')) WHERE zone_key IS NULL;
+ALTER TABLE parking_zone MODIFY COLUMN zone_key VARCHAR(50) NOT NULL;
 -- --------------------------------------------------------
 
 -- 
--- entry_exit_log
+-- Migration for table 'entry_exit_log'
 -- 
 -- --------------------------------------------------------
 ALTER TABLE entry_exit_log ADD COLUMN IF NOT EXISTS zone_id BIGINT NULL AFTER admin_id;
@@ -214,13 +206,12 @@ DEALLOCATE PREPARE stmt;
 -- --------------------------------------------------------
 
 -- 
--- parking_slot 
+-- Migration for table 'parking_slot' 
 -- 
 -- --------------------------------------------------------
 ALTER TABLE parking_slot
     ADD COLUMN IF NOT EXISTS category ENUM('Employee', 'Vendor', 'Visitor') NOT NULL DEFAULT 'Employee' AFTER slot_label,
-    ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
-        ON UPDATE CURRENT_TIMESTAMP;
+    ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
 
 SET @slot_col_type = (
     SELECT DATA_TYPE FROM information_schema.COLUMNS
@@ -255,29 +246,27 @@ DEALLOCATE PREPARE stmt;
 -- --------------------------------------------------------
 
 -- 
--- member 
+-- Migrartion for table 'member' 
 -- 
 -- --------------------------------------------------------
 ALTER TABLE member
     ADD COLUMN IF NOT EXISTS registered_plant ENUM('west', 'east', 'eastwest') NOT NULL DEFAULT 'west' AFTER name,
     ADD COLUMN IF NOT EXISTS category ENUM('Employee', 'Vendor', 'Visitor') NOT NULL DEFAULT 'Employee' AFTER registered_plant,
     ADD COLUMN IF NOT EXISTS sim_exp DATE NULL AFTER category,
+    ADD COLUMN IF NOT EXISTS location VARCHAR(255) NULL AFTER registered_plant,
     ADD COLUMN IF NOT EXISTS created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER sim_exp,
-    ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
-        ON UPDATE CURRENT_TIMESTAMP AFTER created_at,
-    ADD COLUMN IF NOT EXISTS location VARCHAR(255) NULL AFTER registered_plant;
+    ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at;
 -- --------------------------------------------------------
 
 -- 
--- vehicle
+-- Migration for table 'vehicle'
 -- 
 -- --------------------------------------------------------
-ALTER TABLE vehicle
-    ADD COLUMN IF NOT EXISTS stnk_exp DATE NULL AFTER vehicle_type;
+ALTER TABLE vehicle ADD COLUMN IF NOT EXISTS stnk_exp DATE NULL AFTER vehicle_type;
 -- --------------------------------------------------------
 
 -- 
--- analytics_data & occupancy_snapshot
+-- Migration for table 'analytics_data' and 'occupancy_snapshot'
 -- 
 -- --------------------------------------------------------
 ALTER TABLE analytics_data
@@ -307,36 +296,28 @@ CREATE TABLE IF NOT EXISTS occupancy_snapshot (
 -- --------------------------------------------------------
 
 -- 
--- admin_user 
+-- Migration for table 'admin_user' 
 -- 
 -- --------------------------------------------------------
-ALTER TABLE admin_user
-    ADD COLUMN IF NOT EXISTS location ENUM('west', 'east', 'eastwest') NULL;
+ALTER TABLE admin_user ADD COLUMN IF NOT EXISTS location ENUM('west', 'east', 'eastwest') NULL;
 -- --------------------------------------------------------
 
 -- 
 -- Data initialization & seeding
 -- 
 -- --------------------------------------------------------
-INSERT INTO parking_zone (
-    zone_key, zone_name, total_capacity, employee_capacity, vendor_capacity, visitor_capacity, used_capacity, camera_ids
-)
+INSERT INTO parking_zone (zone_key, zone_name, total_capacity, employee_capacity, vendor_capacity, visitor_capacity, used_capacity, camera_ids)
 SELECT tmp.zone_key, tmp.zone_name, tmp.total_capacity, tmp.employee_capacity, tmp.vendor_capacity, tmp.visitor_capacity, 0, '[]'
 FROM (
     SELECT 'west' AS zone_key, 'West Plant' AS zone_name, 130 AS total_capacity, 100 AS employee_capacity, 20 AS vendor_capacity, 10 AS visitor_capacity UNION ALL
     SELECT 'east' AS zone_key, 'East Plant' AS zone_name, 130 AS total_capacity, 100 AS employee_capacity, 20 AS vendor_capacity, 10 AS visitor_capacity UNION ALL
     SELECT 'eastwest' AS zone_key, 'East & West Plant' AS zone_name,  65 AS total_capacity,  50 AS employee_capacity, 10 AS vendor_capacity,  5 AS visitor_capacity
 ) AS tmp
-WHERE NOT EXISTS (
-    SELECT 1 FROM parking_zone WHERE zone_key = tmp.zone_key
-);
+WHERE NOT EXISTS (SELECT 1 FROM parking_zone WHERE zone_key = tmp.zone_key);
 
 INSERT INTO admin_user (username, password, role, email, location)
 SELECT 'admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMaJqhol5QONYeHf.1KGCpiqpu', 'Admin', 'admin@aips.local', 'west'
-FROM DUAL
-WHERE NOT EXISTS (
-    SELECT 1 FROM admin_user WHERE username = 'admin'
-);
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM admin_user WHERE username = 'admin');
 
-SELECT 'patch applied successfully' AS status;
+SELECT 'Applied successfully' AS status;
 -- --------------------------------------------------------

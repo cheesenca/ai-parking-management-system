@@ -1,19 +1,37 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { AuthUser } from '@/lib/types';
-import { apiLogin, clearSession, USER_KEY, TOKEN_KEY } from '@/lib/backendApi';
+import {
+  apiLogin,
+  apiRegister,
+  apiForgotPassword,
+  clearSession,
+  USER_KEY,
+} from '@/lib/backendApi';
+
+interface RegisterData {
+  username: string;
+  email: string;
+  password: string;
+  role?: string;
+  location?: string;
+}
 
 interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
+  register: (data: RegisterData) => Promise<{ ok: boolean; message: string }>;
+  forgotPassword: (email: string, newPassword: string) => Promise<{ ok: boolean; message: string }>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
-  user: null, 
+  user: null,
   loading: true,
   login: async () => false,
+  register: async () => ({ ok: false, message: '' }),
+  forgotPassword: async () => ({ ok: false, message: '' }),
   logout: () => {},
 });
 
@@ -33,36 +51,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      if (username === 'admin' && password === 'admin123') {
-        const mockUser: AuthUser = { 
-          username: 'admin', 
-          role: 'Admin', 
-          location: null, 
-        };
-        setUser(mockUser);
-        sessionStorage.setItem(USER_KEY, JSON.stringify(mockUser));
-        sessionStorage.setItem(TOKEN_KEY, 'mock-jwt-token-12345');
-        return true;
-      }
-      
-      if (username === 'westsec' && password === 'security123') {
-        const mockSec: AuthUser = { 
-          username: 'westsec', 
-          role: 'Security', 
-          location: 'west', 
-        };
-        setUser(mockSec);
-        sessionStorage.setItem(USER_KEY, JSON.stringify(mockSec));
-        sessionStorage.setItem(TOKEN_KEY, 'mock-jwt-token-westsec');
-        return true;
-      }
-
       const authUser = await apiLogin(username, password);
       setUser(authUser);
       sessionStorage.setItem(USER_KEY, JSON.stringify(authUser));
       return true;
     } catch {
-      return false; 
+      return false;
+    }
+  };
+
+  const register = async (data: RegisterData) => {
+    try {
+      const res = await apiRegister(data);
+      return { ok: true, message: res.message };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : 'Registrasi gagal' };
+    }
+  };
+
+  const forgotPassword = async (email: string, newPassword: string) => {
+    try {
+      const res = await apiForgotPassword(email, newPassword);
+      return { ok: true, message: res.message };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : 'Gagal mereset password' };
     }
   };
 
@@ -72,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, forgotPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -9,11 +9,8 @@ from pathlib import Path
 from typing import Optional
 from app.core.config import PARKING_MAP_JSON
 
-
+# Bootstrap sys.path
 def _bootstrap(f: str) -> None:
-    """
-    
-    """
     p = Path(f).resolve()
     feat = proj = None
     for parent in p.parents:
@@ -31,14 +28,14 @@ _bootstrap(__file__)
 
 def _slot_label(idx: int) -> str:
     """
-    
+    Creating sequential unique code labels for parking slots in an Excel-style format
     """
     return f"{string.ascii_uppercase[idx % 26]}{idx // 26 + 1}"
 
 
 def _load_ref(args: argparse.Namespace) -> np.ndarray:
     """
-    
+    Capture a background reference image based on user input arguments
     """
     if args.image:
         f = cv2.imread(str(args.image))
@@ -63,7 +60,7 @@ def run_annotator(
     save_path: Path = PARKING_MAP_JSON,
 ) -> Optional[dict]:
     """
-    
+    Running an OpenCV-based GUI application to draw or define the polygon coordinates of parking slot areas
     """
     slots = []
     wip = []
@@ -88,7 +85,7 @@ def run_annotator(
 
     def render() -> np.ndarray:
         """
-        
+        Redrawing all graphic components onto the canvas frame
         """
         out = reference.copy()
         for s in slots:
@@ -107,9 +104,10 @@ def run_annotator(
         cv2.putText(out, f"Slots: {len(slots)}, L=vertex R=close G=grid U=undo S=save Q=quit", (8, h-12), cv2.FONT_HERSHEY_SIMPLEX, 0.46, (200,200,200), 1)
         return out
 
+
     def auto_grid():
         """
-        
+        Automatically generate a grid of parking slots based on the canvas size, distributed evenly
         """
         slots.clear()
         fh, fw = reference.shape[:2]
@@ -139,7 +137,7 @@ def run_annotator(
             save_path.parent.mkdir(parents=True, exist_ok=True)
             with open(save_path, "w") as f:
                 json.dump(pm, f, indent=2)
-            print(f"\n✓ Saved {len(slots)} slot(s) → {save_path}")
+            print(f"\nSaved {len(slots)} slot(s) → {save_path}")
             result = pm
             break
         elif key == ord("q"):

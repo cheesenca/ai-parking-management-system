@@ -55,12 +55,37 @@ export async function apiLogin(
   password: string,
 ): Promise<AuthUser> {
   const data = await apiFetch<{ access_token: string; user: AuthUser }>(
-    '/api/auth/login',
+    '/api/v1/auth/login',
     { method: 'POST', body: JSON.stringify({ username, password }) },
     true,
   );
   setToken(data.access_token);
   return data.user;
+}
+
+export async function apiRegister(data: {
+  username: string;
+  email: string;
+  password: string;
+  role?: string;
+  location?: string;
+}): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(
+    '/api/v1/auth/register',
+    { method: 'POST', body: JSON.stringify(data) },
+    true,
+  );
+}
+
+export async function apiForgotPassword(
+  email: string,
+  new_password: string,
+): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(
+    '/api/v1/auth/forgot-password',
+    { method: 'POST', body: JSON.stringify({ email, new_password }) },
+    true,
+  );
 }
 
 export async function apiGetMembers(params?: {
@@ -72,32 +97,40 @@ export async function apiGetMembers(params?: {
   if (params?.zone && params.zone !== 'All')         q.set('zone', params.zone);
   if (params?.category && params.category !== 'All') q.set('category', params.category);
   if (params?.search)                                 q.set('search', params.search);
-  return apiFetch<Member[]>(`/api/members?${q}`);
+  return apiFetch<Member[]>(`/api/v1/members?${q}`);
 }
 
 export async function apiCreateMember(data: Omit<Member, 'member_id' | 'position' | 'last_in' | 'last_out'>): Promise<Member> {
-  return apiFetch<Member>('/api/members', { method: 'POST', body: JSON.stringify(data) });
+  return apiFetch<Member>('/api/v1/members', { method: 'POST', body: JSON.stringify(data) });
 }
 
 export async function apiUpdateMember(id: number, data: Partial<Member>): Promise<Member> {
-  return apiFetch<Member>(`/api/members/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  return apiFetch<Member>(`/api/v1/members/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 }
 
 export async function apiDeleteMember(id: number): Promise<void> {
-  return apiFetch<void>(`/api/members/${id}`, { method: 'DELETE' });
+  return apiFetch<void>(`/api/v1/members/${id}`, { method: 'DELETE' });
 }
 
 export async function apiImportMembers(rows: Partial<Member>[]): Promise<{ created: number; errors: string[] }> {
-  return apiFetch('/api/members/import', { method: 'POST', body: JSON.stringify({ rows }) });
+  return apiFetch('/api/v1/members/import', { method: 'POST', body: JSON.stringify({ rows }) });
 }
 
+// MENDUKUNG DUA ALTERNATIF JALUR BACKEND AGAR DIJAMIN MUNCUL SAAT DEMO
 export async function apiGetLogs(
   zone?: string,
   limit = 100,
 ): Promise<EntryLog[]> {
   const q = new URLSearchParams({ limit: String(limit) });
   if (zone) q.set('zone', zone);
-  return apiFetch<EntryLog[]>(`/api/slots/logs?${q}`);
+  
+  try {
+    // Jalur 1: Mengikuti rute standard bawaan frontend
+    return await apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
+  } catch (err) {
+    // Jalur 2: Cadangan jika python menembak rute gabungan
+    return await apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
+  }
 }
 
 export async function apiGetLiveSlots(zone: string) {
@@ -109,23 +142,23 @@ export async function apiGetLiveSlots(zone: string) {
     total_capacity: number;
     total_occupied: number;
     total_available: number;
-  }>(`/api/slots/live?zone=${zone}`);
+  }>(`/api/v1/slots/live?zone=${zone}`);
 }
 
 export async function apiForecastZones(): Promise<ZoneCapacity[]> {
-  return apiFetch<ZoneCapacity[]>('/api/forecast/zones');
+  return apiFetch<ZoneCapacity[]>('/api/v1/forecast/zones');
 }
 
 export async function apiForecastDashboard(
   zone_id: number,
   days = 30,
 ): Promise<{ zone_id: number; zone_name: string; summary: ZoneCapacity; data: ForecastDay[] }> {
-  return apiFetch(`/api/forecast/dashboard/${zone_id}?days=${days}`);
+  return apiFetch(`/api/v1/forecast/dashboard/${zone_id}?days=${days}`);
 }
 
 export async function apiOccupancyHistory(
   zone_id: number,
   hours = 24,
 ): Promise<OccupancyPoint[]> {
-  return apiFetch<OccupancyPoint[]>(`/api/forecast/occupancy/history/${zone_id}?hours=${hours}`);
+  return apiFetch<OccupancyPoint[]>(`/api/v1/forecast/occupancy/history/${zone_id}?hours=${hours}`);
 }

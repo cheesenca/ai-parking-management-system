@@ -8,10 +8,8 @@ from app.core.config import HOMOGRAPHY_SRC, HOMOGRAPHY_W, HOMOGRAPHY_H, HOMOGRAP
 
 _M: Optional[np.ndarray] = None 
 
+# Bootstrap sys.path
 def _bootstrap(f: str) -> None:
-    """
-    
-    """
     p = Path(f).resolve()
     feat = proj = None
     for parent in p.parents:
@@ -29,7 +27,7 @@ _bootstrap(__file__)
 
 def _dst_points() -> np.ndarray:
     """
-    
+    Generate destination point coordinates for perspective transformation
     """
     return np.float32([
         [0, 0],

@@ -3,14 +3,32 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
+from app.features.forecast.services.model import forecast_next_days
 
-router = APIRouter(prefix="/api/forecast", tags=["Forecasting Analytics"])
+router = APIRouter()
+
+# GET /api/forecast/arima
+@router.get("/arima")
+def get_arima_forecast(
+    periods: int = Query(default=30, ge=1, le=90),
+):
+    """
+    Generate a live total-demand forecast using the pre-trained ARIMA model (arima.joblib)
+    """
+    try:
+        return {
+            "model": "ARIMA",
+            "periods": periods,
+            "forecast": forecast_next_days(periods),
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
 # GET /api/forecast/zones
 @router.get("/zones")
 def list_zones(db: Session = Depends(get_db)):
     """
-    
+    Retrieve the list of all parking zones available in the database
     """
     zones = db.query(ParkingZone).all()
     return [{"zone_id": z.zone_id, **z.to_dashboard_dict()} for z in zones]
@@ -24,7 +42,7 @@ def get_forecast_dashboard(
     db: Session = Depends(get_db),
 ):
     """
-    
+    Retrieving data from the parking demand forecasting and average occupancy dashboard for a specific zone, based on the number of days parameter
     """
     zone = db.query(ParkingZone).filter(ParkingZone.zone_id == zone_id).first()
     if not zone:
@@ -71,7 +89,7 @@ def get_occupancy_history(
     db: Session = Depends(get_db),
 ):
     """
-    
+    Capturing real-time historical snapshots of parking space occupancy based on specified hourly intervals
     """
     since = datetime.now() - timedelta(hours=hours)
     snapshots = (

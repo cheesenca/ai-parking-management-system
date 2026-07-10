@@ -179,112 +179,114 @@ export default function MembersPage() {
   ] as const;
 
   return (
-    <div style={{ padding: '28px 32px' }} className="fadein">
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Members</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-            Manage registered vehicle members · {loading ? '…' : `${data.length} total`}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => void fetchMembers()} className="btn-secondary" style={{ fontSize: 12 }} disabled={loading}>
-            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          </button>
-          <button onClick={exportCSV} className="btn-secondary" style={{ fontSize: 12 }}>
-            <Download size={13} /> Export CSV
-          </button>
-          {selected.length > 0 && (
-            <button onClick={() => void handleDelete(selected)} className="btn-secondary"
-              style={{ fontSize: 12, color: 'var(--red)', borderColor: 'var(--red)' }} disabled={saving}>
-              <Trash2 size={13} /> Delete ({selected.length})
+    <>
+      <div style={{ padding: '28px 32px' }} className="fadein">
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Members</h1>
+            <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+              Manage registered vehicle members · {loading ? '…' : `${data.length} total`}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => void fetchMembers()} className="btn-secondary" style={{ fontSize: 12 }} disabled={loading}>
+              <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             </button>
-          )}
-          <button onClick={openAdd} className="btn-primary" style={{ fontSize: 12 }}>
-            <Plus size={13} /> Add Member
-          </button>
+            <button onClick={exportCSV} className="btn-secondary" style={{ fontSize: 12 }}>
+              <Download size={13} /> Export CSV
+            </button>
+            {selected.length > 0 && (
+              <button onClick={() => void handleDelete(selected)} className="btn-secondary"
+                style={{ fontSize: 12, color: 'var(--red)', borderColor: 'var(--red)' }} disabled={saving}>
+                <Trash2 size={13} /> Delete ({selected.length})
+              </button>
+            )}
+            <button onClick={openAdd} className="btn-primary" style={{ fontSize: 12 }}>
+              <Plus size={13} /> Add Member
+            </button>
+          </div>
         </div>
-      </div>
 
-      {error && (
-        <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)', color: 'var(--danger-text)', fontSize: 13, marginBottom: 16 }}>
-          {error}
+        {error && (
+          <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)', color: 'var(--danger-text)', fontSize: 13, marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+            <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search name, KPK, or plate…"
+              style={{ ...inputStyle, paddingLeft: 32 }} />
+          </div>
+          {(['All','west','east','eastwest'] as const).map(z => (
+            <button key={z} onClick={() => setActiveZone(z)} style={{
+              padding: '8px 14px', borderRadius: 8, border: '1px solid', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              borderColor: activeZone === z ? 'var(--red)' : 'var(--border)',
+              background:  activeZone === z ? 'var(--red)' : '#fff',
+              color:       activeZone === z ? '#fff' : 'var(--text)',
+            }}>{zoneLabels[z]}</button>
+          ))}
+          <select value={filterCat} onChange={e => setFilterCat(e.target.value as Category | 'All')}
+            style={{ ...inputStyle, width: 'auto', padding: '8px 12px' }}>
+            <option value="All">All Categories</option>
+            <option value="Employee">Employee</option>
+            <option value="Vendor">Vendor</option>
+            <option value="Visitor">Visitor</option>
+          </select>
         </div>
-      )}
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, KPK, or plate…"
-            style={{ ...inputStyle, paddingLeft: 32 }} />
-        </div>
-        {(['All','west','east','eastwest'] as const).map(z => (
-          <button key={z} onClick={() => setActiveZone(z)} style={{
-            padding: '8px 14px', borderRadius: 8, border: '1px solid', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            borderColor: activeZone === z ? 'var(--red)' : 'var(--border)',
-            background:  activeZone === z ? 'var(--red)' : '#fff',
-            color:       activeZone === z ? '#fff' : 'var(--text)',
-          }}>{zoneLabels[z]}</button>
-        ))}
-        <select value={filterCat} onChange={e => setFilterCat(e.target.value as Category | 'All')}
-          style={{ ...inputStyle, width: 'auto', padding: '8px 12px' }}>
-          <option value="All">All Categories</option>
-          <option value="Employee">Employee</option>
-          <option value="Vendor">Vendor</option>
-          <option value="Visitor">Visitor</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th><input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} /></th>
-                <th>KPK</th><th>Name</th><th>Zone</th><th>Cat.</th>
-                <th>Plate 1</th><th>Plate 2</th><th>Type</th>
-                <th>SIM Exp</th><th>STNK Exp</th><th>Status</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Memuat data…</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>No members found.</td></tr>
-              ) : filtered.map(m => (
-                <tr key={m.member_id} style={{ opacity: saving ? 0.6 : 1 }}>
-                  <td><input type="checkbox" checked={selected.includes(m.member_id)} onChange={() => toggleSelect(m.member_id)} /></td>
-                  <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>{m.kpk_number}</span></td>
-                  <td style={{ fontWeight: 600 }}>{m.name}</td>
-                  <td style={{ fontSize: 11 }}>{zoneLabels[m.registered_plant]}</td>
-                  <td><span className={`badge ${catColors[m.category]}`} style={{ fontSize: 10 }}>{m.category.slice(0,3)}</span></td>
-                  <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{m.plate_1}</span></td>
-                  <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{m.plate_2 || '—'}</span></td>
-                  <td style={{ fontSize: 12 }}>{m.vehicle_type_1}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{m.sim_exp}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{m.stnk_exp_1}</td>
-                  <td>
-                    <span style={{
-                      fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
-                      background: m.position === 'IN' ? 'var(--green-bg)' : 'var(--bg)',
-                      color: m.position === 'IN' ? 'var(--green-text)' : 'var(--muted)',
-                      border: `1px solid ${m.position === 'IN' ? '#6EE7B7' : 'var(--border)'}`,
-                    }}>{m.position}</span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => openEdit(m)} className="btn-secondary" style={{ padding: '4px 8px' }}><Pencil size={11} /></button>
-                      <button onClick={() => void handleDelete([m.member_id])} className="btn-secondary" style={{ padding: '4px 8px', color: 'var(--red)' }}><Trash2 size={11} /></button>
-                    </div>
-                  </td>
+        {/* Table */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th><input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} /></th>
+                  <th>KPK</th><th>Name</th><th>Zone</th><th>Cat.</th>
+                  <th>Plate 1</th><th>Plate 2</th><th>Type</th>
+                  <th>SIM Exp</th><th>STNK Exp</th><th>Status</th><th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={12} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Memuat data…</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={12} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>No members found.</td></tr>
+                ) : filtered.map(m => (
+                  <tr key={m.member_id} style={{ opacity: saving ? 0.6 : 1 }}>
+                    <td><input type="checkbox" checked={selected.includes(m.member_id)} onChange={() => toggleSelect(m.member_id)} /></td>
+                    <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>{m.kpk_number}</span></td>
+                    <td style={{ fontWeight: 600 }}>{m.name}</td>
+                    <td style={{ fontSize: 11 }}>{zoneLabels[m.registered_plant]}</td>
+                    <td><span className={`badge ${catColors[m.category]}`} style={{ fontSize: 10 }}>{m.category.slice(0,3)}</span></td>
+                    <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{m.plate_1}</span></td>
+                    <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{m.plate_2 || '—'}</span></td>
+                    <td style={{ fontSize: 12 }}>{m.vehicle_type_1}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{m.sim_exp}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{m.stnk_exp_1}</td>
+                    <td>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                        background: m.position === 'IN' ? 'var(--green-bg)' : 'var(--bg)',
+                        color: m.position === 'IN' ? 'var(--green-text)' : 'var(--muted)',
+                        border: `1px solid ${m.position === 'IN' ? '#6EE7B7' : 'var(--border)'}`,
+                      }}>{m.position}</span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button onClick={() => openEdit(m)} className="btn-secondary" style={{ padding: '4px 8px' }}><Pencil size={11} /></button>
+                        <button onClick={() => void handleDelete([m.member_id])} className="btn-secondary" style={{ padding: '4px 8px', color: 'var(--red)' }}><Trash2 size={11} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -292,17 +294,21 @@ export default function MembersPage() {
       {modal && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-          zIndex: 1000, overflowY: 'auto', padding: '40px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+          zIndex: 1000, padding: '20px', 
         }}>
           <div style={{
             background: '#fff', borderRadius: 16, width: '100%', maxWidth: 580,
-            boxShadow: '0 32px 80px rgba(0,0,0,.2)', flexShrink: 0,
+            boxShadow: '0 32px 80px rgba(0,0,0,.2)',
+            display: 'flex', flexDirection: 'column',
+            /* maxHeight: '90vh' TELAH DIHAPUS agar modal bisa terbuka penuh sesuai isi */
           }}>
+            
             {/* Modal Header */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '20px 24px', borderBottom: '1px solid var(--border)',
+              flexShrink: 0,
             }}>
               <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', margin: 0 }}>
                 {modal === 'add' ? '+ Add Member' : 'Edit Member'}
@@ -313,6 +319,7 @@ export default function MembersPage() {
             </div>
 
             {/* Modal Body */}
+            {/* overflowY: 'auto' TELAH DIHAPUS dari sini agar form tidak bisa discroll */}
             <div style={{ padding: '24px' }}>
               {formError && (
                 <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)', color: 'var(--danger-text)', fontSize: 13, marginBottom: 16 }}>
@@ -389,6 +396,7 @@ export default function MembersPage() {
             <div style={{
               display: 'flex', gap: 10, justifyContent: 'flex-end',
               padding: '16px 24px', borderTop: '1px solid var(--border)',
+              flexShrink: 0,
             }}>
               <button onClick={closeModal} className="btn-secondary" style={{ fontSize: 13 }}>Cancel</button>
               <button onClick={() => void handleSave()} className="btn-primary" style={{ fontSize: 13 }} disabled={saving}>
@@ -398,6 +406,6 @@ export default function MembersPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

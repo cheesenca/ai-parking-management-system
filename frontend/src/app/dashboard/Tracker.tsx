@@ -2,10 +2,11 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
-import { useLiveDetection, useSlotOccupancy } from '@/lib/api';
+import { useLiveDetection, useSlotOccupancy, useSlotDetection } from '@/lib/api';
 import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
+import SlotDetectionCamera from '@/components/SlotDetectionCamera';
 import SlotMap from '@/components/SlotMap';
 import CategoryStats from '@/components/CategoryStats';
 
@@ -19,8 +20,9 @@ export default function TrackerPage() {
   const { user } = useAuth();
   const defaultZone = (user?.location ?? 'west') as Zone;
   const [selectedZone, setSelectedZone] = useState<Zone>(defaultZone);
-  const lpr = useLiveDetection({ cameraIndex: 0, enabled: true });
+  const lpr = useLiveDetection({ cameraIndex: 1, enabled: false });
   const slots = useSlotOccupancy(selectedZone);
+  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: 0, enabled: true });
   const [latestIn, setLatestIn] = useState('—');
   const [latestOut, setLatestOut] = useState('—');
 
@@ -30,15 +32,9 @@ export default function TrackerPage() {
     if (lpr.latest.event_type === 'entry') setLatestIn(t); else setLatestOut(t);
   }, [lpr.latest]);
 
-  const connBanner = (conn: string, label: string) =>
-    conn === 'disconnected' ? (
-      <div style={{ padding: '8px 14px', borderRadius: 8, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)', fontSize: 12, color: 'var(--danger-text)', marginBottom: 8 }}>
-        {label} Not connected — check the host configuration in the environment variable.
-      </div>
-    ) : null;
-
   return (
     <div style={{ padding: '28px 32px' }} className="fadein">
+      {/* HEADER UTAMA */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Parking Tracker</h1>
@@ -50,12 +46,21 @@ export default function TrackerPage() {
         </div>
       </div>
 
-      {connBanner(lpr.conn, 'LPR Camera (NEXT_PUBLIC_LPR_HOST)')}
-      {connBanner(slots.conn, 'Slot Scanner (NEXT_PUBLIC_SLOT_HOST)')}
+      {/* 1. GRID KIRI & KANAN (Sejajar sampai Live Slot Map) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        
+        {/* KOLOM KIRI: Live Detection (YOLOv8 + EasyOCR) */}
+        <div>
+          <LiveDetection lpr={lpr} selectedZone={selectedZone} />
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        <LiveDetection lpr={lpr} selectedZone={selectedZone} />
+        {/* KOLOM KANAN: Slot Camera, Post Location, dan Slot Map */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          
+          {/* Slot Detection naik ke posisi paling atas di kolom kanan */}
+          <SlotDetectionCamera detection={slotDetection} />
+          
+          {/* Post Location ditukar ke bawah Slot Detection */}
           <div className="card" style={{ padding: 18 }}>
             <div className="label" style={{ marginBottom: 8 }}>Post Location</div>
             <select
@@ -70,26 +75,38 @@ export default function TrackerPage() {
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Zone locked to assigned post.</p>
             )}
           </div>
+
+          {/* Peta Slot Parkir */}
           <SlotMap slots={slots} />
-          <CategoryStats slots={slots} />
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ padding: 12, borderRadius: 9, background: 'var(--green-bg)', border: '1px solid #6EE7B7' }}>
-                <div className="label" style={{ color: 'var(--green-text)', marginBottom: 6 }}>Latest In</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--green-text)' }}>{latestIn}</div>
-              </div>
-              <div style={{ padding: 12, borderRadius: 9, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)' }}>
-                <div className="label" style={{ color: 'var(--danger-text)', marginBottom: 6 }}>Latest Out</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--danger-text)' }}>{latestOut}</div>
-              </div>
-            </div>
-            {user?.role === 'Admin' && (
-              <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: 12, fontSize: 12 }}>
-                <Settings size={13} /> Set Capacity
-              </button>
-            )}
-          </div>
+          
         </div>
+      </div>
+
+      {/* 2. BAGIAN BAWAH: Elemen yang Melebar Full-Width */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        
+        {/* Available Slots by Category */}
+        <CategoryStats slots={slots} />
+        
+        {/* Kartu Status & Set Capacity (Diperluas) */}
+        <div className="card" style={{ padding: 24 }}> {/* Padding diperbesar */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ padding: 18, borderRadius: 12, background: 'var(--green-bg)', border: '1px solid #6EE7B7' }}>
+              <div className="label" style={{ color: 'var(--green-text)', marginBottom: 8, fontSize: 12 }}>Latest In</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--green-text)' }}>{latestIn}</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 12, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)' }}>
+              <div className="label" style={{ color: 'var(--danger-text)', marginBottom: 8, fontSize: 12 }}>Latest Out</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--danger-text)' }}>{latestOut}</div>
+            </div>
+          </div>
+          {user?.role === 'Admin' && (
+            <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: 16, padding: '12px 0', fontSize: 13, fontWeight: 600 }}>
+              <Settings size={15} /> Set Capacity
+            </button>
+          )}
+        </div>
+
       </div>
     </div>
   );

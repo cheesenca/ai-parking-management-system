@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.models import AdminUser
 
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "GANTI_INI_DI_PRODUCTION_DENGAN_STRING_ACAK_256_BIT")
+SECRET_KEY = os.getenv("SECRET_KEY", "e8d6d16d4bcaed978853d2f4b6f5efb7b6bc58bcfcde3f9352f8f5f3ca38a51e")
 ALGORITHM = "HS256"
 EXPIRE_MIN = int(os.getenv("TOKEN_EXPIRE_MINUTES", "480"))   
 
@@ -53,7 +53,7 @@ class LoginResponse(BaseModel):
 
 def verify_password(plain: str, hashed: str) -> bool:
     """
-    
+    Verifies whether the plaintext password input matches the hash in the database
     """
     if hashed.startswith("$2b$") or hashed.startswith("$2a$"):
         return pwd_context.verify(plain, hashed)
@@ -62,14 +62,14 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def hash_password(plain: str) -> str:
     """
-    
+    Convert plain-text passwords into a secure bcrypt hash format
     """
     return pwd_context.hash(plain)
 
 
 def create_token(data: dict, expire_minutes: int = EXPIRE_MIN) -> str:
     """
-    
+    Issuing a JWT with an expiration time claim
     """
     payload = {**data, "exp": datetime.utcnow() + timedelta(minutes=expire_minutes)}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -77,7 +77,7 @@ def create_token(data: dict, expire_minutes: int = EXPIRE_MIN) -> str:
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """
-    
+    Dependency Injection to secure endpoints
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -101,7 +101,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
     """
-    
+    Endpoint for user authentication
     """
     admin = db.query(AdminUser).filter(AdminUser.username == req.username).first()
     if not admin or not verify_password(req.password, admin.password):
@@ -130,7 +130,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     """
-    
+    Endpoint for registering a new administrator or security officer account
     """
     existing_user = db.query(AdminUser).filter(
         (AdminUser.username == req.username) | (AdminUser.email == req.email)
@@ -154,7 +154,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
-    
+    Demo simulation endpoint for resetting a user's password based on email verification
     """
     user = db.query(AdminUser).filter(AdminUser.email == req.email).first()
     if not user:
@@ -168,7 +168,7 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=AuthUserResponse)
 def me(current_user: AdminUser = Depends(get_current_user)):
     """
-    
+    Protected endpoint for retrieving profile information of the currently logged-in user
     """
     return AuthUserResponse(
         username=current_user.username,

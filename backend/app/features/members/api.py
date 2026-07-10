@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.models import Member, Vehicle
 
-router = APIRouter(prefix="/api/members", tags=["Members"])
+router = APIRouter(
+    tags=["Members"],
+)
 
 
 # Request schema
@@ -46,8 +48,10 @@ class ImportRow(BaseModel):
     rows: List[MemberCreate]
 
 
-# Helper 
 def _parse_date(s: Optional[str]) -> Optional[date]:
+    """
+    Convert an ISO-formatted date string into a Python date object
+    """
     if not s:
         return None
     try:
@@ -56,7 +60,6 @@ def _parse_date(s: Optional[str]) -> Optional[date]:
         return None
 
 
-# GET /api/members
 @router.get("")
 def list_members(
     zone: Optional[str] = Query(default=None),
@@ -66,11 +69,15 @@ def list_members(
     db: Session = Depends(get_db),
 ):
     """
-
+    Retrieve a list of members based on zone, category, or text search filters
     """
     q = db.query(Member)
-    if zone: q = q.filter(Member.registered_plant == zone)
-    if category: q = q.filter(Member.category == category)
+    if zone: 
+        q = q.filter(Member.registered_plant == zone)
+
+    if category: 
+        q = q.filter(Member.category == category)
+
     if search:
         like = f"%{search}%"
         q = q.filter(
@@ -82,9 +89,11 @@ def list_members(
     return [m.to_member_dict() for m in members]
 
 
-# POST /api/members 
 @router.post("", status_code=201)
 def create_member(body: MemberCreate, db: Session = Depends(get_db)):
+    """
+    Registering new members in the database, along with their vehicle details
+    """
     if db.query(Member).filter(Member.kpk_number == body.kpk_number).first():
         raise HTTPException(status_code=409, detail=f"KPK '{body.kpk_number}' sudah terdaftar")
     if db.query(Vehicle).filter(Vehicle.plate_number == body.plate_1).first():
@@ -122,16 +131,24 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
     return member.to_member_dict()
 
 
-# PUT /api/members/{id}
 @router.put("/{member_id}")
 def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_db)):
+    """
+    Update member profile data and associated vehicle data based on member_id
+    """
     member = db.query(Member).filter(Member.member_id == member_id).first()
     if not member:
-        raise HTTPException(status_code=404, detail="Member tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Member not found")
 
-    if body.name: member.name = body.name
-    if body.registered_plant: member.registered_plant = body.registered_plant
-    if body.category: member.category = body.category
+    if body.name: 
+        member.name = body.name
+
+    if body.registered_plant: 
+        member.registered_plant = body.registered_plant
+
+    if body.category: 
+        member.category = body.category
+
     if body.sim_exp is not None:
         member.sim_exp = _parse_date(body.sim_exp)
 
@@ -141,11 +158,17 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
             Vehicle.plate_number == body.plate_1,
             Vehicle.vehicle_id != v1.vehicle_id,
         ).first()
+
         if conflict:
             raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' dipakai member lain")
         v1.plate_number = body.plate_1
-    if v1 and body.vehicle_type_1: v1.vehicle_type = body.vehicle_type_1
-    if v1 and body.stnk_exp_1 is not None: v1.stnk_exp = _parse_date(body.stnk_exp_1)
+
+    if v1 and body.vehicle_type_1: 
+        v1.vehicle_type = body.vehicle_type_1
+
+    if v1 and body.stnk_exp_1 is not None: 
+        v1.stnk_exp = _parse_date(body.stnk_exp_1)
+
     if body.plate_2:
         v2 = member.vehicles[1] if len(member.vehicles) > 1 else None
         if v2:
@@ -164,9 +187,11 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
     return member.to_member_dict()
 
 
-# DELETE /api/members/{id} 
 @router.delete("/{member_id}", status_code=204)
 def delete_member(member_id: int, db: Session = Depends(get_db)):
+    """
+    Delete member data based on ID
+    """
     member = db.query(Member).filter(Member.member_id == member_id).first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -174,11 +199,10 @@ def delete_member(member_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-# POST /api/members/import
 @router.post("/import")
 def import_members(body: ImportRow, db: Session = Depends(get_db)):
     """
-    
+    Perform a bulk import of member data from a list or array
     """
     created = 0
     errors: list[str] = []

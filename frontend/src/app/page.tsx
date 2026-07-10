@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
@@ -127,7 +128,12 @@ export default function LoginPage() {
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label className="label" style={{ display: 'block', marginBottom: 7 }}>Password</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                <label className="label" style={{ display: 'block' }}>Password</label>
+                <Link href="/forgot-password" style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
+                  Forgot password?
+                </Link>
+              </div>
               <div style={{ position: 'relative' }}>
                 <input
                   className="input"
@@ -165,22 +171,11 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div style={{
-            marginTop: 28, padding: '16px', borderRadius: 10,
-            background: 'var(--bg)', border: '1px solid var(--border)',
-          }}>
-            <div className="label" style={{ marginBottom: 10 }}>Demo Credentials</div>
-            {[
-              { user: 'admin',   pass: 'admin123',    role: 'Admin (full access)' },
-              { user: 'westsec', pass: 'security123', role: 'Security — West Plant' },
-              { user: 'eastsec', pass: 'security123', role: 'Security — East Plant' },
-            ].map(c => (
-              <div key={c.user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--red)', fontWeight: 600 }}>{c.user}</span>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{c.role}</span>
-              </div>
-            ))}
+          <div style={{ marginTop: 28, textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
+            Don&apos;t have an account?{' '}
+            <Link href="/register" style={{ color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
+              Sign up
+            </Link>
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List
 from app.core.config import (
-    YOLO_MODEL_PATH, 
+    OCCUPANCY_MODEL_PATH, 
     YOLO_BASE_MODEL,
     YOLO_CONF, 
     YOLO_IOU_NMS, 
@@ -21,10 +21,8 @@ from app.core.config import (
 CAPACITY_CONFIG_JSON = FEATURE_ROOT / "data" / "capacity_config.json" 
 _yolo = None
 
+# Bootstrap sys.path
 def _bootstrap(f: str) -> None:
-    """
-    
-    """
     p = Path(f).resolve()
     feat = proj = None
     for parent in p.parents:
@@ -109,7 +107,7 @@ def _get_yolo():
             from ultralytics import YOLO
         except ImportError:
             raise ImportError("ultralytics library not found")
-        model_path = str(YOLO_MODEL_PATH) if YOLO_MODEL_PATH.exists() else YOLO_BASE_MODEL
+        model_path = str(OCCUPANCY_MODEL_PATH) if OCCUPANCY_MODEL_PATH.exists() else YOLO_BASE_MODEL
         print(f"Loading YOLOv8: {model_path}")
         _yolo = YOLO(model_path)
     return _yolo

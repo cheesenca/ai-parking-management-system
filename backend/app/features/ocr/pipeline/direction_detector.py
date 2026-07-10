@@ -3,11 +3,11 @@ from collections import defaultdict
 
 class DirectionDetector:
     """
-    
+    Virtual Line-Based (Tripwire) Vehicle Direction Detector
     """
     def __init__(self, tripwire_y: int, history_len: int = 30, cooldown_frames: int = 60):
         """
-        
+        Initialize DirectionDetector configuration
         """
         self.tripwire_y = tripwire_y
         self.history_len = history_len
@@ -19,7 +19,7 @@ class DirectionDetector:
 
     def update(self, track_id: int, cx: float, cy: float) -> str | None:
         """
-        
+        Updating the vehicle's latest centroid position and checking for line crossing
         """
         self._frame_num += 1
         history = self._histories[track_id]
@@ -48,19 +48,19 @@ class DirectionDetector:
 
     def _check_crossing(self, prev_y: float, curr_y: float) -> str | None:
         """
-        
+        Internal function to analyze coordinate intersections with the tripwire line
         """
         twy = self.tripwire_y
         if prev_y < twy and curr_y >= twy:
-            return 'entry'   # top → bottom = moving into parking lot
+            return 'entry'  
         if prev_y >= twy and curr_y < twy:
-            return 'exit'    # bottom → top = leaving parking lot
+            return 'exit'
         return None
 
 
     def is_near_tripwire(self, cy: float, margin: int = 80) -> bool:
         """
-        
+        Checks whether the object's current Y-coordinate position falls within a specific range zone (margin) around the tripwire line
         """
         return abs(cy - self.tripwire_y) < margin
 

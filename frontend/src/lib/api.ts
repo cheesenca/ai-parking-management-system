@@ -44,7 +44,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
     let ws: WebSocket;
 
     try {
-      ws = new WebSocket(`${proto}://${LPR_HOST}/ws/camera?${q.toString()}`);
+      ws = new WebSocket(`${proto}://${LPR_HOST}/api/v1/ocr/ws/camera?${q.toString()}`);
     } catch {
       if (!cancelled) setConn('disconnected');
       return;
@@ -110,6 +110,89 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
   }, [cameraIndex, gateType, enabled]);
 
   return { conn, frame, latest, scanCount, vehiclesInFrame };
+}
+
+export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabled?: boolean } = {}) {
+  const { cameraIndex = 0, enabled = true } = opts;
+  const [conn, setConn] = useState<ConnState>('connecting');
+  const [frame, setFrame] = useState<string | null>(null);
+  const [detections, setDetections] = useState(0);
+  const [occupied, setOccupied] = useState(0);
+  const [available, setAvailable] = useState(0);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (!enabled || zone === 'eastwest') {
+      setConn('disconnected');
+      return;
+    }
+    if (!SLOT_HOST) {
+      setConn('disconnected');
+      return;
+    }
+
+    let cancelled = false;
+    const q = new URLSearchParams({ zone, camera_index: String(cameraIndex) });
+
+    const token = getToken();
+    if (token) q.set('token', token);
+
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    let ws: WebSocket;
+
+    try {
+      ws = new WebSocket(`${proto}://${SLOT_HOST}/api/v1/slots/ws/slots?${q.toString()}`);
+    } catch {
+      if (!cancelled) setConn('disconnected');
+      return;
+    }
+
+    wsRef.current = ws;
+    setConn('connecting');
+
+    const failTimer = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        try { ws.close(); } catch {}
+        if (!cancelled) setConn('disconnected');
+      }
+    }, 5000);
+
+    ws.onopen = () => {
+      clearTimeout(failTimer);
+      if (!cancelled) setConn('live');
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data as string);
+        if (data.error) { if (!cancelled) setConn('disconnected'); return; }
+        if (data.frame) setFrame(`data:image/jpeg;base64,${data.frame as string}`);
+        if (typeof data.detections === 'number') setDetections(data.detections);
+        if (typeof data.occupied === 'number') setOccupied(data.occupied);
+        if (typeof data.available === 'number') setAvailable(data.available);
+      } catch {
+
+      }
+    };
+
+    ws.onerror = () => {
+      clearTimeout(failTimer);
+      if (!cancelled) setConn('disconnected');
+    };
+
+    ws.onclose = () => {
+      clearTimeout(failTimer);
+      if (!cancelled) setConn('disconnected');
+    };
+
+    return () => {
+      cancelled = true;
+      clearTimeout(failTimer);
+      try { ws.close(); } catch {}
+    };
+  }, [zone, cameraIndex, enabled]);
+
+  return { conn, frame, detections, occupied, available };
 }
 
 export function useSlotOccupancy(zone: Zone) {

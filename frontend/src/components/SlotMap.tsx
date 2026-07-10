@@ -14,6 +14,15 @@ export default function SlotMap({ slots }: { slots: any }) {
       <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', background: '#0E1726' }}>
         <svg viewBox={`0 0 ${slots.map.frame.w} ${slots.map.frame.h}`} style={{ width: '100%', display: 'block' }}>
           <rect x={0} y={0} width={slots.map.frame.w} height={slots.map.frame.h} fill="#0E1726" />
+          {slots.map.background && (
+            <image
+              href={slots.map.background}
+              x={0} y={0}
+              width={slots.map.frame.w} height={slots.map.frame.h}
+              preserveAspectRatio="xMidYMid slice"
+              opacity={0.9}
+            />
+          )}
           {slots.map.slots.map((s: any) => {
             const occ = slots.slotStatus[s.id] === 'Occupied';
             const pts = s.polygon.map((p: any) => p.join(',')).join(' ');
@@ -22,10 +31,10 @@ export default function SlotMap({ slots }: { slots: any }) {
             return (
               <g key={s.id}>
                 <polygon points={pts}
-                  fill={occ ? 'rgba(229,0,43,.40)' : 'rgba(21,154,114,.34)'}
+                  fill={occ ? 'rgba(229,0,43,.45)' : 'rgba(21,154,114,.40)'}
                   stroke={occ ? '#E5002B' : '#22C58B'} strokeWidth={2} />
                 <text x={cx} y={cy + 4} textAnchor="middle" fontSize={16} fontFamily="monospace"
-                  fill="#fff" opacity={0.92}>{s.id}</text>
+                  fill="#fff" opacity={0.95} style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: 3 }}>{s.id}</text>
               </g>
             );
           })}

@@ -82,7 +82,7 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
       </div>
 
       {/* Auto-filled fields */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12.5 }}>
         {fields.map((f) => (
           <div key={f.label}>
             <div className="label" style={{ marginBottom: 5 }}>{f.label}</div>
@@ -101,14 +101,24 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
         ))}
       </div>
 
-      {status === 'denied' && det && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--teal)' }} onClick={() => setVerified(lpr.scanCount)}>
-            <CheckCircle size={14} /> Verify &amp; Admit
-          </button>
-          <button className="btn-secondary" onClick={() => setVerified(null)}>Reject</button>
-        </div>
-      )}
+      <div style={{ 
+        display: 'flex', 
+        gap: 10, 
+        marginTop: 16,
+        opacity: (status === 'denied' && det) ? 1 : 0.4, 
+        pointerEvents: (status === 'denied' && det) ? 'auto' : 'none',
+        transition: 'opacity 0.2s ease-in-out'
+      }}>
+        <button className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--teal)', border: 'none' }} onClick={() => setVerified(lpr.scanCount)}>
+          <CheckCircle size={14} /> Verify &amp; Admit
+        </button>
+        
+        {/* Tambahkan flex: 1 dan justifyContent: 'center' di sini agar ukurannya rata */}
+        <button className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setVerified(null)}>
+          Reject
+        </button>
+      </div>
+
     </div>
   );
 }

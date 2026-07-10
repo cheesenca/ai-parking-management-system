@@ -5,16 +5,16 @@ import numpy as np
 
 def preprocess_plate(crop: np.ndarray) -> np.ndarray:
     """
-    Takes a raw crop of the license plate region and returns a cleaned-up grayscale image ready for EasyOCR.
+    Takes a raw crop of the license plate region and returns a cleaned-up grayscale image ready for EasyOCR
     """
-    # Upscale — EasyOCR works much better on larger images
+    # Upscale 
     scale = max(1, int(200 / crop.shape[0]))  
     crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
     # Convert to grayscale
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    # Bilateral filter — removes noise while preserving plate character edges
+    # Bilateral filter 
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    # Adaptive threshold — handles uneven lighting across the plate
+    # Adaptive threshold 
     thresh = cv2.adaptiveThreshold(
         gray, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -29,6 +29,7 @@ def clean_plate_text(raw: str) -> str:
     Removes noise characters from OCR output
     """
     import re
+    
     # Keep only letters, digits, spaces
     cleaned = re.sub(r'[^A-Z0-9 ]', '', raw.upper().strip())
     # Collapse multiple spaces
@@ -43,6 +44,7 @@ def average_plate_readings(readings: list[str]) -> str:
     single-frame OCR errors
     """
     from collections import Counter
+
     if not readings:
         return ''
     counts = Counter(readings)

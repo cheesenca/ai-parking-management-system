@@ -6,10 +6,12 @@ pymysql
 cryptography
 opencv-python
 numpy
+joblib
 requests
 ultralytics
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt==4.0.1
 easyocr
 torch
 torchvision
