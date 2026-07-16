@@ -12,7 +12,7 @@ from plate_utils import preprocess_plate, clean_plate_text, average_plate_readin
 from direction_detector import DirectionDetector
 
 # Paths
-MODEL_DIR = Path(__file__).parent.parent / "models"
+MODEL_DIR = Path(__file__).resolve().parents[3] / "models"
 DETECTOR_PATH = MODEL_DIR / "parkwise_detector.pt"
 
 # Constants 

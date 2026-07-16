@@ -57,3 +57,29 @@
 2026-07-16 19:42:43 - app.features.occupancy.api.endpoints - INFO - zone=east good_feature_matches=1 (need >= 12, aligned=False)
 2026-07-16 19:42:44 - app.features.occupancy.api.endpoints - INFO - Client disconnected.
 2026-07-16 19:42:45 - app.main - INFO - Application shutting down...
+2026-07-16 20:06:58 - app.main - INFO - Application starting up...
+2026-07-16 20:06:58 - app.core.database - INFO - Database engine initialized (mysql)
+2026-07-16 20:06:59 - app.core.database - INFO - Database migrations applied successfully
+2026-07-16 20:06:59 - app.core.database - INFO - Tables and verification checks initialized
+2026-07-16 20:06:59 - app.main - INFO - Database initialized
+2026-07-16 20:11:18 - app.main - INFO - Application starting up...
+2026-07-16 20:11:18 - app.core.database - INFO - Database engine initialized (mysql)
+2026-07-16 20:11:19 - app.core.database - INFO - Database migrations applied successfully
+2026-07-16 20:11:19 - app.core.database - INFO - Tables and verification checks initialized
+2026-07-16 20:11:19 - app.main - INFO - Database initialized
+2026-07-16 20:11:33 - app.features.auth.api - INFO - User 'Admin' logged in successfully (role=Admin)
+2026-07-16 20:11:41 - easyocr.easyocr - WARNING - Using CPU. Note: This module is much faster with a GPU.
+2026-07-16 20:20:18 - app.main - INFO - Application starting up...
+2026-07-16 20:20:18 - app.core.database - INFO - Database engine initialized (mysql)
+2026-07-16 20:20:18 - app.core.database - INFO - Database migrations applied successfully
+2026-07-16 20:20:18 - app.core.database - INFO - Tables and verification checks initialized
+2026-07-16 20:20:18 - app.main - INFO - Database initialized
+2026-07-16 20:20:36 - easyocr.easyocr - WARNING - Using CPU. Note: This module is much faster with a GPU.
+2026-07-16 20:22:05 - app.main - INFO - Application shutting down...
+2026-07-16 20:22:17 - app.main - INFO - Application starting up...
+2026-07-16 20:22:17 - app.core.database - INFO - Database engine initialized (mysql)
+2026-07-16 20:22:18 - app.core.database - INFO - Database migrations applied successfully
+2026-07-16 20:22:18 - app.core.database - INFO - Tables and verification checks initialized
+2026-07-16 20:22:18 - app.main - INFO - Database initialized
+2026-07-16 20:22:18 - easyocr.easyocr - WARNING - Using CPU. Note: This module is much faster with a GPU.
+2026-07-16 20:23:50 - app.main - INFO - Application shutting down...

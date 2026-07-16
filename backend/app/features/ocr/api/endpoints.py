@@ -2,12 +2,16 @@ import asyncio
 import base64
 import sys
 import cv2
+from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 # Add pipeline directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
+
+from app.core.database import SessionLocal
+from app.core.models import EntryExitLog, ParkingZone
 
 # App setup 
 router = APIRouter()
@@ -21,6 +25,45 @@ def get_pipeline() -> AIPSPipeline:
     if _pipeline is None:
         _pipeline = AIPSPipeline(use_pretrained=False)
     return _pipeline
+
+
+def save_detection_event(event: dict, zone_key: str) -> None:
+    """
+    Persist one OCR detection/crossing event to entry_exit_log.
+    Runs in its own short-lived DB session so a slow/failed write
+    never blocks or crashes the camera streaming loop.
+    """
+    db = SessionLocal()
+    try:
+        zone = db.query(ParkingZone).filter(ParkingZone.zone_key == zone_key).first()
+        if zone is None:
+            print(f"[OCR->DB] Unknown zone_key '{zone_key}', skipping log write")
+            return
+
+        event_type_map = {"entry": "Entry", "exit": "Exit"}
+        db_event_type = event_type_map.get(event.get("event_type"), "Denied")
+
+        raw_ts = event.get("timestamp")
+        try:
+            event_ts = datetime.fromisoformat(raw_ts) if raw_ts else datetime.now()
+        except ValueError:
+            event_ts = datetime.now()
+
+        log = EntryExitLog(
+            zone_id=zone.zone_id,
+            event_type=db_event_type,
+            plate_detected=event.get("plate", "")[:20],
+            confidence_score=event.get("confidence"),
+            event_timestamp=event_ts,
+            auth_method="AI_LPR",
+        )
+        db.add(log)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[OCR->DB] Failed to save detection event: {e}")
+    finally:
+        db.close()
 
 
 # Health check 
@@ -57,7 +100,8 @@ def simulate_scan():
 async def camera_feed(
     websocket: WebSocket,
     camera_index: int = Query(default=0),
-    gate_type: str = Query(default="entry"),   
+    gate_type: str = Query(default="entry"),
+    zone: str = Query(default="west"),
 ):
     """
     Connect from the ParkWise dashboard Parking Tracer page.
@@ -68,6 +112,9 @@ async def camera_feed(
         gate_type    : 'entry' or 'exit' — overrides direction detection
                        if set to a fixed value (optional, leave blank to
                        use automatic direction detection)
+        zone         : zone_key (e.g. 'west', 'east') this camera/gate
+                       belongs to — used to log entry_exit_log against
+                       the correct parking_zone
     """
     await websocket.accept()
     print(f"[WS] Client connected | camera={camera_index}")
@@ -111,6 +158,10 @@ async def camera_feed(
                     "timestamp": ev['timestamp'],
                     "status": ev['status'],
                 }
+
+                # Persist confirmed crossing events (skip low-confidence/no-plate noise)
+                if ev.get('status') == 'detected':
+                    save_detection_event(ev, zone)
 
             await websocket.send_json(payload)
 

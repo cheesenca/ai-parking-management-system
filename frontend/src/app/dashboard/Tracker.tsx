@@ -21,9 +21,11 @@ export default function TrackerPage() {
   const { user } = useAuth();
   const defaultZone = (user?.location ?? 'west') as Zone;
   const [selectedZone, setSelectedZone] = useState<Zone>(defaultZone);
-  const lpr = useLiveDetection({ cameraIndex: 1, enabled: false });
+  const lpr = useLiveDetection({ cameraIndex: 0, enabled: true });
+  // const lpr = useLiveDetection({ cameraIndex: 1, enabled: false });
   const slots = useSlotOccupancy(selectedZone);
-  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: true });
+  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: false });
+  // const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: true });
   const [latestIn, setLatestIn] = useState('—');
   const [latestOut, setLatestOut] = useState('—');
   const [capacityModalOpen, setCapacityModalOpen] = useState(false);

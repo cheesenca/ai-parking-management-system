@@ -28,8 +28,8 @@ export interface Detection {
   member: Member | null;
 }
 
-export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry' | 'exit'; enabled?: boolean } = {}) {
-  const { cameraIndex = 0, gateType, enabled = true } = opts;
+export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry' | 'exit'; zone?: Zone; enabled?: boolean } = {}) {
+  const { cameraIndex = 0, gateType, zone = 'west', enabled = true } = opts;
   const [conn, setConn] = useState<ConnState>('connecting');
   const [frame, setFrame] = useState<string | null>(null);
   const [latest, setLatest]  = useState<Detection | null>(null);
@@ -48,7 +48,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
     }
 
     let cancelled = false;
-    const q = new URLSearchParams({ camera_index: String(cameraIndex) });
+    const q = new URLSearchParams({ camera_index: String(cameraIndex), zone });
     if (gateType) q.set('gate_type', gateType);
 
     const token = getToken();
