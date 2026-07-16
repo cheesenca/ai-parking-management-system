@@ -1,11 +1,14 @@
 from __future__ import annotations
 import cv2
+import logging
 import numpy as np
 import sys, time, argparse, threading, requests
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from app.core.config import settings, OCCUPANCY_MODEL_PATH, PARKING_MAP_JSON
+
+logger = logging.getLogger(__name__)
 
 # Bootstrap sys.path
 def _bootstrap(f):
@@ -193,9 +196,9 @@ def push(zone: str, slot_status: dict[str, str], id2cat: dict[str, str]):
         })
         if r.status_code == 200:
             occ = sum(1 for v in slot_status.values() if v == "Occupied")
-            print(f"[{datetime.now():%H:%M:%S}] push OK  occupied={occ}/{len(slot_status)}")
+            logger.info(f"push OK occupied={occ}/{len(slot_status)}")
     except Exception as e:
-        print(f"[WARN] failed to push: {e}")
+        logger.warning(f"failed to push: {e}")
 
 
 def run(source: str, zone: str = "west", conf: float | None = None):
@@ -205,9 +208,9 @@ def run(source: str, zone: str = "west", conf: float | None = None):
     conf = conf if conf is not None else settings.YOLO_CONF
     iou_thresh = settings.IOU_THRESHOLD
 
-    print(f"\n[AIPS] Device: {DEVICE.upper()}")
-    print(f"[AIPS] Model: {OCCUPANCY_MODEL_PATH}")
-    print(f"[AIPS] Conf: {conf}  IoU threshold: {iou_thresh}  Smoothing window: {SMOOTHING_WINDOW}")
+    logger.info(f"Device: {DEVICE.upper()}")
+    logger.info(f"Model: {OCCUPANCY_MODEL_PATH}")
+    logger.info(f"Conf: {conf}  IoU threshold: {iou_thresh}  Smoothing window: {SMOOTHING_WINDOW}")
 
     parking_map = load_parking_map(PARKING_MAP_JSON)
     slot_ids = [s["id"] for s in parking_map["slots"]]
@@ -218,21 +221,21 @@ def run(source: str, zone: str = "west", conf: float | None = None):
     t0 = time.time()
     model = YOLO(str(OCCUPANCY_MODEL_PATH))
     model.to(DEVICE)
-    print(f"[AIPS] Model loaded {time.time()-t0:.1f}s")
+    logger.info(f"Model loaded {time.time()-t0:.1f}s")
 
     if DEVICE == "cuda":
         model(np.zeros((480, 640, 3), dtype=np.uint8), device=DEVICE, verbose=False)
-        print("[AIPS] GPU warm-up OK")
+        logger.info("GPU warm-up OK")
 
     src = int(source) if source.isdigit() else source
     cam = Camera(src)
     time.sleep(1.0)
     ret, test = cam.read()
     if not ret or test is None:
-        print(f"[ERROR] Can't open the camera: {source}")
+        logger.error(f"Can't open the camera: {source}")
         cam.release(); return
 
-    print("[AIPS] Active Camera. 'q'=exit, '+'/'-'=confidence configuration\n")
+    logger.info("Active Camera. q=exit, +/-=confidence configuration")
     cv2.namedWindow("AIPS - Live Occupancy Monitor", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("AIPS - Live Occupancy Monitor", 960, 540)
 
@@ -250,7 +253,7 @@ def run(source: str, zone: str = "west", conf: float | None = None):
             raw_status = detect_slots(model, enhanced, parking_map, conf, iou_thresh)
             stable_status = smoother.update(raw_status)
         except Exception as e:
-            print(f"[WARN] {e}")
+            logger.warning(f"{e}")
             stable_status = smoother.stable
 
         fps_n += 1
@@ -265,17 +268,20 @@ def run(source: str, zone: str = "west", conf: float | None = None):
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
-            print("\n[AIPS] Stopped."); break
+            logger.info("Stopped"); break
         elif key == ord('+') and conf < 0.95:
-            conf = round(conf + 0.05, 2); print(f"[CONF] -> {conf}")
+            conf = round(conf + 0.05, 2); logger.info(f"Confidence -> {conf}")
         elif key == ord('-') and conf > 0.05:
-            conf = round(conf - 0.05, 2); print(f"[CONF] -> {conf}")
+            conf = round(conf - 0.05, 2); logger.info(f"Confidence -> {conf}")
 
     cam.release()
     cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
+    from app.core.logging import setup_logging
+    setup_logging()
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="0")
     ap.add_argument("--zone", default="west")

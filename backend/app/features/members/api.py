@@ -1,18 +1,22 @@
 from __future__ import annotations
+
+import logging
 from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.core.models import Member, Vehicle
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["Members"],
 )
 
 
-# Request schema
 class VehicleIn(BaseModel):
     plate_number: str
     vehicle_type: str = "Car"
@@ -95,9 +99,12 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
     Registering new members in the database, along with their vehicle details
     """
     if db.query(Member).filter(Member.kpk_number == body.kpk_number).first():
-        raise HTTPException(status_code=409, detail=f"KPK '{body.kpk_number}' sudah terdaftar")
+        logger.warning("Create member rejected: KPK '%s' already registered", body.kpk_number)
+        raise HTTPException(status_code=409, detail=f"KPK '{body.kpk_number}' already registered")
+    
     if db.query(Vehicle).filter(Vehicle.plate_number == body.plate_1).first():
-        raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' sudah terdaftar")
+        logger.warning("Create member rejected: plate '%s' already registered", body.plate_1)
+        raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' already registered")
 
     member = Member(
         kpk_number=body.kpk_number,
@@ -118,7 +125,7 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
 
     if body.plate_2:
         if db.query(Vehicle).filter(Vehicle.plate_number == body.plate_2).first():
-            raise HTTPException(status_code=409, detail=f"Plate 2 '{body.plate_2}' sudah terdaftar")
+            raise HTTPException(status_code=409, detail=f"Plate 2 '{body.plate_2}' already registered")
         db.add(Vehicle(
             member_id=member.member_id,
             plate_number=body.plate_2,
@@ -128,6 +135,7 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(member)
+    logger.info("Member created: kpk='%s', name='%s'", member.kpk_number, member.name)
     return member.to_member_dict()
 
 
@@ -138,6 +146,7 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
     """
     member = db.query(Member).filter(Member.member_id == member_id).first()
     if not member:
+        logger.warning("Update member failed: member_id=%s not found", member_id)
         raise HTTPException(status_code=404, detail="Member not found")
 
     if body.name: 
@@ -160,7 +169,7 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
         ).first()
 
         if conflict:
-            raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' dipakai member lain")
+            raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' already used by the other member")
         v1.plate_number = body.plate_1
 
     if v1 and body.vehicle_type_1: 
@@ -184,6 +193,7 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
 
     db.commit()
     db.refresh(member)
+    logger.info("Member updated: member_id=%s", member_id)
     return member.to_member_dict()
 
 
@@ -194,9 +204,11 @@ def delete_member(member_id: int, db: Session = Depends(get_db)):
     """
     member = db.query(Member).filter(Member.member_id == member_id).first()
     if not member:
+        logger.warning("Delete member failed: member_id=%s not found", member_id)
         raise HTTPException(status_code=404, detail="Member not found")
     db.delete(member)
     db.commit()
+    logger.info("Member deleted: member_id=%s", member_id)
 
 
 @router.post("/import")
@@ -209,10 +221,10 @@ def import_members(body: ImportRow, db: Session = Depends(get_db)):
     for row in body.rows:
         try:
             if db.query(Member).filter(Member.kpk_number == row.kpk_number).first():
-                errors.append(f"{row.kpk_number}: KPK sudah ada")
+                errors.append(f"{row.kpk_number}: KPK already registered")
                 continue
             if db.query(Vehicle).filter(Vehicle.plate_number == row.plate_1).first():
-                errors.append(f"{row.kpk_number}: Plate {row.plate_1} sudah ada")
+                errors.append(f"{row.kpk_number}: Plate {row.plate_1} already registered")
                 continue
             member = Member(
                 kpk_number=row.kpk_number, name=row.name,
@@ -233,6 +245,8 @@ def import_members(body: ImportRow, db: Session = Depends(get_db)):
             created += 1
         except Exception as e:
             errors.append(f"{row.kpk_number}: {e}")
+            logger.error("Import row failed for kpk='%s': %s", row.kpk_number, e)
             db.rollback()
     db.commit()
+    logger.info("Member import finished: created=%d, errors=%d", created, len(errors))
     return {"created": created, "errors": errors}

@@ -7,6 +7,17 @@ const LPR_HOST = process.env.NEXT_PUBLIC_LPR_HOST  || '';
 const SLOT_HOST = process.env.NEXT_PUBLIC_SLOT_HOST || '';
 
 export type ConnState = 'live' | 'connecting' | 'disconnected' | 'simulated';
+
+// Physical camera routing per zone. Only ONE slot-scanner camera exists
+// today, so every zone points at device 0 - the backend enforces this same
+// mapping server-side (ZONE_CAMERA_DEVICE in endpoints.py) so this value is
+// really just for display/testing purposes. Once East Plant / East&West
+// Plant get their own cameras, update both this map and its backend twin.
+export const CAMERA_INDEX_BY_ZONE: Record<Zone, number> = {
+  west: 0,
+  east: 0,      // TODO: point to the East Plant camera device once installed
+  eastwest: 0,  // TODO: point to the East&West Plant camera device once installed
+};
 export interface Detection {
   plate_detected: string;
   confidence: number;
@@ -27,7 +38,10 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setConn('disconnected');
+      return;
+    }
     if (!LPR_HOST) {
       setConn('disconnected');
       return;
@@ -119,10 +133,14 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
   const [detections, setDetections] = useState(0);
   const [occupied, setOccupied] = useState(0);
   const [available, setAvailable] = useState(0);
+  const [calibrated, setCalibrated] = useState(false);
+  const [calibrationActive, setCalibrationActive] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const [lastError, setLastError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!enabled || zone === 'eastwest') {
+    if (!enabled) {
       setConn('disconnected');
       return;
     }
@@ -132,6 +150,7 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
     }
 
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout>;
     const q = new URLSearchParams({ zone, camera_index: String(cameraIndex) });
 
     const token = getToken();
@@ -165,11 +184,13 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data as string);
-        if (data.error) { if (!cancelled) setConn('disconnected'); return; }
+        if (data.error) { if (!cancelled) { setConn('disconnected'); setLastError(String(data.error)); } return; }
         if (data.frame) setFrame(`data:image/jpeg;base64,${data.frame as string}`);
         if (typeof data.detections === 'number') setDetections(data.detections);
         if (typeof data.occupied === 'number') setOccupied(data.occupied);
         if (typeof data.available === 'number') setAvailable(data.available);
+        if (typeof data.calibrated === 'boolean') setCalibrated(data.calibrated);
+        if (typeof data.calibration_active === 'boolean') setCalibrationActive(data.calibration_active);
       } catch {
 
       }
@@ -177,22 +198,40 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
 
     ws.onerror = () => {
       clearTimeout(failTimer);
-      if (!cancelled) setConn('disconnected');
+      if (!cancelled) {
+        setConn('disconnected');
+        // Don't leave a stale last-good frame on screen once the connection
+        // drops - it can look like the (possibly calibrated) overlay is
+        // still live when it's actually just a frozen old frame.
+        setFrame(null);
+        setDetections(0);
+        setCalibrationActive(false);
+      }
     };
 
     ws.onclose = () => {
       clearTimeout(failTimer);
-      if (!cancelled) setConn('disconnected');
+      if (!cancelled) {
+        setConn('disconnected');
+        setFrame(null);
+        setDetections(0);
+        setCalibrationActive(false);
+        // Auto-retry - camera/model init can be slow or momentarily busy
+        // (e.g. briefly held by another process), so keep trying instead of
+        // requiring a manual page refresh.
+        retryTimer = setTimeout(() => setRetryTick(t => t + 1), 4000);
+      }
     };
 
     return () => {
       cancelled = true;
       clearTimeout(failTimer);
+      clearTimeout(retryTimer);
       try { ws.close(); } catch {}
     };
-  }, [zone, cameraIndex, enabled]);
+  }, [zone, cameraIndex, enabled, retryTick]);
 
-  return { conn, frame, detections, occupied, available };
+  return { conn, frame, detections, occupied, available, calibrated, calibrationActive, lastError };
 }
 
 export function useSlotOccupancy(zone: Zone) {

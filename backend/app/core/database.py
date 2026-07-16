@@ -1,6 +1,9 @@
+import logging
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _engine = None
 _session_factory = None
@@ -34,6 +37,7 @@ def _init() -> None:
         )
 
     _session_factory = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+    logger.info("Database engine initialized (%s)", "sqlite" if "sqlite" in db_url else "mysql")
 
 
 def SessionLocal():
@@ -106,9 +110,10 @@ def run_migrations() -> None:
             try:
                 conn.execute(text(sql))
                 conn.commit()
-            except Exception:
+            except Exception as exc:
                 conn.rollback()
-    print("Database migrations applied successfully")
+                logger.debug("Migration skipped/failed: %s (%s)", sql, exc)
+    logger.info("Database migrations applied successfully")
 
 
 def create_tables() -> None:
@@ -120,7 +125,7 @@ def create_tables() -> None:
 
     Base.metadata.create_all(bind=_engine)
     run_migrations()
-    print("Tables and verification checks initialized")
+    logger.info("Tables and verification checks initialized")
 
 
 def check_connection() -> bool:
@@ -133,5 +138,5 @@ def check_connection() -> bool:
             conn.execute(text("SELECT 1"))
         return True
     except Exception as exc:
-        print(f"Connection failed: {exc}")
+        logger.error("Database connection check failed: %s", exc)
         return False

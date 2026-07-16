@@ -94,9 +94,9 @@ export async function apiGetMembers(params?: {
   search?: string;
 }): Promise<Member[]> {
   const q = new URLSearchParams();
-  if (params?.zone && params.zone !== 'All')         q.set('zone', params.zone);
+  if (params?.zone && params.zone !== 'All') q.set('zone', params.zone);
   if (params?.category && params.category !== 'All') q.set('category', params.category);
-  if (params?.search)                                 q.set('search', params.search);
+  if (params?.search) q.set('search', params.search);
   return apiFetch<Member[]>(`/api/v1/members?${q}`);
 }
 
@@ -116,7 +116,6 @@ export async function apiImportMembers(rows: Partial<Member>[]): Promise<{ creat
   return apiFetch('/api/v1/members/import', { method: 'POST', body: JSON.stringify({ rows }) });
 }
 
-// MENDUKUNG DUA ALTERNATIF JALUR BACKEND AGAR DIJAMIN MUNCUL SAAT DEMO
 export async function apiGetLogs(
   zone?: string,
   limit = 100,
@@ -125,10 +124,8 @@ export async function apiGetLogs(
   if (zone) q.set('zone', zone);
   
   try {
-    // Jalur 1: Mengikuti rute standard bawaan frontend
     return await apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
   } catch (err) {
-    // Jalur 2: Cadangan jika python menembak rute gabungan
     return await apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
   }
 }
@@ -143,6 +140,61 @@ export async function apiGetLiveSlots(zone: string) {
     total_occupied: number;
     total_available: number;
   }>(`/api/v1/slots/live?zone=${zone}`);
+}
+
+export interface CalibrationSlot {
+  id: string;
+  category: 'Employee' | 'Vendor' | 'Visitor';
+  polygon: [number, number][];
+}
+
+export async function apiGetCalibrationDefaults(zoneKey: string): Promise<{
+  zone: string;
+  default_slots: { id: string; category: string }[];
+  slots: CalibrationSlot[];
+}> {
+  return apiFetch(`/api/v1/slots/calibration/${zoneKey}/defaults`);
+}
+
+export async function apiGetCalibrationSnapshot(zoneKey: string): Promise<{
+  zone: string;
+  width: number;
+  height: number;
+  image: string; // base64 jpeg, no data: prefix
+  default_slots: { id: string; category: string }[];
+}> {
+  return apiFetch(`/api/v1/slots/calibration/${zoneKey}/snapshot`);
+}
+
+export async function apiGetCalibration(zoneKey: string): Promise<{
+  zone: string;
+  slots: CalibrationSlot[];
+  calibrated: boolean;
+}> {
+  return apiFetch(`/api/v1/slots/calibration/${zoneKey}`);
+}
+
+export async function apiSaveCalibration(zoneKey: string, slots: CalibrationSlot[], referenceImage?: string) {
+  return apiFetch(`/api/v1/slots/calibration/${zoneKey}`, {
+    method: 'POST',
+    body: JSON.stringify({ slots, reference_image: referenceImage }),
+  });
+}
+
+export async function apiUpdateZoneCapacity(
+  zoneKey: string,
+  data: { employee_capacity?: number; vendor_capacity?: number; visitor_capacity?: number },
+): Promise<{
+  zone: string;
+  total_capacity: number;
+  employee_capacity: number;
+  vendor_capacity: number;
+  visitor_capacity: number;
+}> {
+  return apiFetch(`/api/v1/slots/zones/${zoneKey}/capacity`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function apiForecastZones(): Promise<ZoneCapacity[]> {

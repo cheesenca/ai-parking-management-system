@@ -1,4 +1,5 @@
 'use client'
+
 import { type Category } from '@/lib/types';
 
 export default function CategoryStats({ slots }: { slots: any }) {
@@ -17,7 +18,7 @@ export default function CategoryStats({ slots }: { slots: any }) {
   const categories: Category[] = ['Employee', 'Vendor', 'Visitor'];
 
   return (
-    <div className="card" style={{ padding: 24 }}> {/* Padding diperbesar dari 18 ke 24 */}
+    <div className="card" style={{ padding: 24 }}> 
       <div className="card-title" style={{ marginBottom: 18, fontSize: 14 }}>Available Slots by Category</div>
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
@@ -44,7 +45,6 @@ export default function CategoryStats({ slots }: { slots: any }) {
                 <span style={{ fontWeight: 600 }}>{cat}</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{pct}%</span>
               </div>
-              {/* Progress bar dipertebal dari 5px menjadi 8px */}
               <div style={{ height: 8, borderRadius: 4, background: 'var(--border)' }}>
                 <div style={{ height: '100%', borderRadius: 4, width: `${pct}%`, background: color, transition: 'width .5s' }} />
               </div>

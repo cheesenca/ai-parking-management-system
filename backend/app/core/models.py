@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 # Enum initialization 

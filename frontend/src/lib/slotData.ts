@@ -17,12 +17,6 @@ export interface ParkingMap {
     h: number; 
   };
   slots: SlotDef[];
-  /**
-   * Optional backdrop image matching the real site layout
-   * (e.g. an exported PNG of PARKING_ARRANGEMENT.pdf for this zone).
-   * Place the file under /public and reference it here, e.g. "/plant-maps/west.png".
-   * Slot polygons must be drawn in the same pixel space as this image.
-   */
   background?: string;
 }
 
@@ -73,7 +67,7 @@ function gridSlots(prefix: string, rows: { y: number; count: number; category: C
 export const PARKING_MAPS: Record<Zone, ParkingMap> = {
   west: {
     zone: 'west', zone_label: 'West Plant', camera_id: 'CAM_WEST_01', frame: FRAME,
-    background: '/plant-maps/west.png', // exported from PARKING ARRANGEMENT - WEST PLANT
+    background: '/plant-maps/west.png', 
     slots: gridSlots('W', [
       { y: 60, count: 10, category: 'Employee' },
       { y: 170, count: 10, category: 'Employee' },
@@ -83,7 +77,7 @@ export const PARKING_MAPS: Record<Zone, ParkingMap> = {
   },
   east: {
     zone: 'east', zone_label: 'East Plant', camera_id: 'CAM_EAST_01', frame: FRAME,
-    background: '/plant-maps/east.png', // exported from PARKING ARRANGEMENT - EAST PLANT
+    background: '/plant-maps/east.png', 
     slots: gridSlots('E', [
       { y: 60, count: 10, category: 'Employee' },
       { y: 170, count: 10, category: 'Employee' },
@@ -93,6 +87,7 @@ export const PARKING_MAPS: Record<Zone, ParkingMap> = {
   },
   eastwest: {
     zone: 'eastwest', zone_label: 'East & West Plant', camera_id: 'CAM_EW_01', frame: FRAME,
+    background: '/plant-maps/eastwest.png',
     slots: gridSlots('EW', [
       { y: 80, count: 10, category: 'Employee' },
       { y: 210, count: 8, category: 'Vendor' },
@@ -100,18 +95,6 @@ export const PARKING_MAPS: Record<Zone, ParkingMap> = {
     ]),
   },
 };
-
-/**
- * NOTE on aligning slots to the real map:
- * The polygons above are still a synthetic grid. Once you export the
- * WEST/EAST plant diagrams from PARKING_ARRANGEMENT.pdf as PNGs into
- * /public/plant-maps/, the fastest path to accurate polygons is:
- *   1) Manual: `python -m app.features.occupancy.scripts.annotate_slot --image west.png`
- *   2) AI auto-detect (no clicking): `python -m app.features.occupancy.scripts.auto_annotate_slot --image west.png --model models/pklot.pt`
- * Both write a parking_map.json with the same {zone, camera_id, frame, slots} shape
- * consumed by ParkingMap - swap PARKING_MAPS[zone] to load from that JSON/API
- * instead of gridSlots() once you have real coordinates.
- */
 
 export const CAPACITY_CONFIG: Record<Zone, Record<Category, number>> = {
   west: { Employee: 100, Vendor: 20, Visitor: 10 },

@@ -112,8 +112,6 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
         <button className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--teal)', border: 'none' }} onClick={() => setVerified(lpr.scanCount)}>
           <CheckCircle size={14} /> Verify &amp; Admit
         </button>
-        
-        {/* Tambahkan flex: 1 dan justifyContent: 'center' di sini agar ukurannya rata */}
         <button className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setVerified(null)}>
           Reject
         </button>

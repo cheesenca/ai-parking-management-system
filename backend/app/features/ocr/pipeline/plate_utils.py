@@ -1,20 +1,31 @@
+"""
+AIPS Model — Plate Preprocessing Utilities
+Improves OCR accuracy by cleaning up the cropped plate image.
+"""
+
 from __future__ import annotations
+
 import cv2
 import numpy as np
 
 
 def preprocess_plate(crop: np.ndarray) -> np.ndarray:
     """
-    Takes a raw crop of the license plate region and returns a cleaned-up grayscale image ready for EasyOCR
+    Takes a raw crop of the license plate region and returns
+    a cleaned-up grayscale image ready for EasyOCR.
     """
-    # Upscale 
-    scale = max(1, int(200 / crop.shape[0]))  
-    crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    # Convert to grayscale
+    # 1. Upscale — EasyOCR works much better on larger images
+    scale = max(1, int(200 / crop.shape[0]))  # target ~200px height
+    crop = cv2.resize(crop, None, fx=scale, fy=scale,
+                      interpolation=cv2.INTER_CUBIC)
+
+    # 2. Convert to grayscale
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    # Bilateral filter 
+
+    # 3. Bilateral filter — removes noise while preserving plate character edges
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    # Adaptive threshold 
+
+    # 4. Adaptive threshold — handles uneven lighting across the plate
     thresh = cv2.adaptiveThreshold(
         gray, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -26,10 +37,11 @@ def preprocess_plate(crop: np.ndarray) -> np.ndarray:
 
 def clean_plate_text(raw: str) -> str:
     """
-    Removes noise characters from OCR output
+    Removes noise characters from OCR output.
+    Indonesian plates are: [1-2 letters] [1-4 digits] [2-3 letters]
+    e.g.  B 1234 ABC  |  D 5678 XY  |  F 999 ZZZ
     """
     import re
-    
     # Keep only letters, digits, spaces
     cleaned = re.sub(r'[^A-Z0-9 ]', '', raw.upper().strip())
     # Collapse multiple spaces
@@ -41,10 +53,9 @@ def average_plate_readings(readings: list[str]) -> str:
     """
     When OCR is run on multiple frames of the same stopped vehicle,
     returns the most frequently occurring plate text — filters out
-    single-frame OCR errors
+    single-frame OCR errors.
     """
     from collections import Counter
-
     if not readings:
         return ''
     counts = Counter(readings)

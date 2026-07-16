@@ -2,13 +2,14 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
-import { useLiveDetection, useSlotOccupancy, useSlotDetection } from '@/lib/api';
+import { useLiveDetection, useSlotOccupancy, useSlotDetection, CAMERA_INDEX_BY_ZONE } from '@/lib/api';
 import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
 import SlotDetectionCamera from '@/components/SlotDetectionCamera';
 import SlotMap from '@/components/SlotMap';
 import CategoryStats from '@/components/CategoryStats';
+import SetCapacityModal from '@/components/SetCapacityModal';
 
 const zoneOptions: { value: Zone; label: string }[] = [
   { value: 'west', label: 'West Plant' },
@@ -22,9 +23,10 @@ export default function TrackerPage() {
   const [selectedZone, setSelectedZone] = useState<Zone>(defaultZone);
   const lpr = useLiveDetection({ cameraIndex: 1, enabled: false });
   const slots = useSlotOccupancy(selectedZone);
-  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: 0, enabled: true });
+  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: true });
   const [latestIn, setLatestIn] = useState('—');
   const [latestOut, setLatestOut] = useState('—');
+  const [capacityModalOpen, setCapacityModalOpen] = useState(false);
 
   useEffect(() => {
     if (!lpr.latest) return;
@@ -101,13 +103,25 @@ export default function TrackerPage() {
             </div>
           </div>
           {user?.role === 'Admin' && (
-            <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: 16, padding: '12px 0', fontSize: 13, fontWeight: 600 }}>
+            <button
+              className="btn-secondary"
+              style={{ width: '100%', justifyContent: 'center', marginTop: 16, padding: '12px 0', fontSize: 13, fontWeight: 600 }}
+              onClick={() => setCapacityModalOpen(true)}
+            >
               <Settings size={15} /> Set Capacity
             </button>
           )}
         </div>
 
       </div>
+
+      {capacityModalOpen && (
+        <SetCapacityModal
+          zone={selectedZone}
+          currentSummary={slots.summary}
+          onClose={() => setCapacityModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

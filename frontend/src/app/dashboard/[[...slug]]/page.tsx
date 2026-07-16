@@ -8,12 +8,14 @@ import TrackerPage from '@/app/dashboard/Tracker';
 import ListPage from '@/app/dashboard/List';
 import MembersPage from '@/app/dashboard/Member';
 import AnalyticsPage from '@/app/dashboard/Analytics';
+import CalibrationPage from '@/app/dashboard/Calibration';
  
 const VIEWS: Record<string, React.ComponentType> = {
   tracker: TrackerPage,
   list: ListPage,
   members: MembersPage,
   analytics: AnalyticsPage,
+  calibration: CalibrationPage,
 };
  
 export default function DashboardPage({

@@ -1,29 +1,32 @@
+"""
+AIPS Model — Camera Test
+Run this to confirm your webcam/camera is accessible before building the pipeline.
+Press Q to quit.
+"""
+
 import cv2
 import sys
 
 def test_camera(index: int = 0):
-    """
-    Testing camera connection and performance using OpenCV
-    """
     print(f"Opening camera index {index}...")
     cap = cv2.VideoCapture(index)
 
     if not cap.isOpened():
-        print(f"Could not open camera {index}.")
-        print("Try a different index: python pipeline/test_camera.py 1")
+        print(f"✗ Could not open camera {index}.")
+        print("  Try a different index: python pipeline/test_camera.py 1")
         sys.exit(1)
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    print(f"Camera opened — {width}x{height} @ {fps:.0f}fps")
-    print("Press Q to quit.")
+    fps    = cap.get(cv2.CAP_PROP_FPS)
+    print(f"✓ Camera opened — {width}x{height} @ {fps:.0f}fps")
+    print("  Press Q to quit.")
 
     frame_count = 0
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to read frame.")
+            print("✗ Failed to read frame.")
             break
 
         frame_count += 1
@@ -40,7 +43,7 @@ def test_camera(index: int = 0):
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"Camera test complete. Captured {frame_count} frames.")
+    print(f"✓ Camera test complete. Captured {frame_count} frames.")
 
 
 if __name__ == "__main__":

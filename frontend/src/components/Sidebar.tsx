@@ -5,13 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { apiIsOnline } from '@/lib/backendApi';
-import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car } from 'lucide-react';
+import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car, Crosshair } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard/tracker', label: 'Parking Tracer', icon: ScanLine, roles: ['Admin', 'Security'] },
   { href: '/dashboard/list', label: 'Parking List', icon: ClipboardList, roles: ['Admin', 'Security'] },
   { href: '/dashboard/members', label: 'Members', icon: Users, roles: ['Admin'] },
   { href: '/dashboard/analytics',label: 'Analytics', icon: BarChart2, roles: ['Admin'] },
+  { href: '/dashboard/calibration', label: 'Slot Calibration', icon: Crosshair, roles: ['Admin'] },
 ];
 
 export default function Sidebar() {

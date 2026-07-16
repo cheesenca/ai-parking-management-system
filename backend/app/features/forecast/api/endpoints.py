@@ -1,9 +1,12 @@
+import logging
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
 from app.features.forecast.services.model import forecast_next_days
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -22,6 +25,7 @@ def get_arima_forecast(
             "forecast": forecast_next_days(periods),
         }
     except FileNotFoundError as exc:
+        logger.error("ARIMA forecast unavailable: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc))
 
 # GET /api/forecast/zones
@@ -46,6 +50,7 @@ def get_forecast_dashboard(
     """
     zone = db.query(ParkingZone).filter(ParkingZone.zone_id == zone_id).first()
     if not zone:
+        logger.warning("Forecast dashboard requested for unknown zone_id=%s", zone_id)
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
     since = date.today() - timedelta(days=days)

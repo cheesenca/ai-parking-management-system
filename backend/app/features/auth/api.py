@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,8 +10,11 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.core.models import AdminUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -81,7 +86,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Token tidak valid atau sudah kadaluarsa",
+        detail="The token is invalid or has expired",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -89,11 +94,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except JWTError as exc:
+        logger.warning("Invalid or expired token rejected: %s", exc)
         raise credentials_exception
         
     user = db.query(AdminUser).filter(AdminUser.username == username).first()
     if user is None:
+        logger.warning("Token valid but user '%s' no longer exists", username)
         raise credentials_exception
     return user
 
@@ -105,10 +112,13 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     """
     admin = db.query(AdminUser).filter(AdminUser.username == req.username).first()
     if not admin or not verify_password(req.password, admin.password):
+        logger.warning("Failed login attempt for username '%s'", req.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Username atau password salah",
+            detail="Incorrect username or password",
         )
+
+    logger.info("User '%s' logged in successfully (role=%s)", admin.username, admin.role)
 
     token = create_token({
         "sub": admin.username,
@@ -137,7 +147,11 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     ).first()
     
     if existing_user:
-        raise HTTPException(status_code=400, detail="Username atau Email sudah terdaftar")
+        logger.warning(
+            "Registration rejected: username/email already taken (username='%s', email='%s')",
+            req.username, req.email,
+        )
+        raise HTTPException(status_code=400, detail="Username or Email already registered")
         
     new_admin = AdminUser(
         username=req.username,
@@ -148,7 +162,8 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     )
     db.add(new_admin)
     db.commit()
-    return {"message": "Registrasi berhasil"}
+    logger.info("New account registered: username='%s', role='%s'", req.username, req.role)
+    return {"message": "Registration successful"}
 
 
 @router.post("/forgot-password")
@@ -158,11 +173,13 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     user = db.query(AdminUser).filter(AdminUser.email == req.email).first()
     if not user:
-        return {"message": "Jika email terdaftar, password telah direset."}
+        logger.warning("Password reset requested for unknown email '%s'", req.email)
+        return {"message": "If the email is registered, the password has been reset"}
         
     user.password = hash_password(req.new_password)
     db.commit()
-    return {"message": "Password berhasil direset (Demo Version)."}
+    logger.info("Password reset for user '%s'", user.username)
+    return {"message": "Password has been reset"}
 
 
 @router.get("/me", response_model=AuthUserResponse)

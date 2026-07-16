@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { EntryLog } from '@/lib/types';
 import { apiGetLogs } from '@/lib/backendApi';

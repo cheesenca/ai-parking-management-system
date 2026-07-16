@@ -97,6 +97,43 @@ def get_category_summary(
     return summary
 
 
+class SlotSmoother:
+    """
+    Tracks recent status history per slot and only reports a status once it
+    has been the majority result for the last `window` frames. This is what
+    keeps the overlay from flickering Occupied/Available back and forth when
+    a single frame's detection is noisy - the slot only "flips" once the new
+    state has been consistently seen, and stays put otherwise.
+    """
+    def __init__(self, slot_ids: List[str], window: int = 8, min_votes_to_flip: int = 5):
+        self.window = window
+        self.min_votes_to_flip = min_votes_to_flip
+        self.history: Dict[str, List[str]] = {sid: [] for sid in slot_ids}
+        self.stable: Dict[str, str] = {sid: "Available" for sid in slot_ids}
+
+    def update(self, raw_status: Dict[str, str]) -> Dict[str, str]:
+        for sid, status in raw_status.items():
+            hist = self.history.setdefault(sid, [])
+            hist.append(status)
+            if len(hist) > self.window:
+                hist.pop(0)
+
+            occupied_votes = hist.count("Occupied")
+            current = self.stable.get(sid, "Available")
+
+            # Only flip the reported state once enough consistent votes have
+            # accumulated - a single noisy frame can no longer toggle a slot.
+            if current == "Available" and occupied_votes >= self.min_votes_to_flip:
+                self.stable[sid] = "Occupied"
+            elif current == "Occupied" and (len(hist) - occupied_votes) >= self.min_votes_to_flip:
+                self.stable[sid] = "Available"
+        return self.stable
+
+    def reset(self, slot_ids: List[str]) -> None:
+        self.history = {sid: [] for sid in slot_ids}
+        self.stable = {sid: "Available" for sid in slot_ids}
+
+
 def _get_yolo():
     """
     Lazy-load YOLOv8 model on first use

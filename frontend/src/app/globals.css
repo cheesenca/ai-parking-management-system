@@ -410,3 +410,5 @@ html, body {
 @media (max-width: 1200px) {
   .kdash .kpi-row, .kdash .upper-grid, .kdash .lower-grid { grid-template-columns: 1fr; }
 }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

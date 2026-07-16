@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Dict
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional
 
 class SlotItem(BaseModel):
     """
@@ -28,6 +28,17 @@ class ZoneUpdate(BaseModel):
     timestamp: str
     slots: List[SlotItem]
     category_summary: Dict[str, CategoryInfo]
+
+
+class CapacityUpdate(BaseModel):
+    """
+    Payload for admins editing a zone's slot capacity per category.
+    Fields are optional so the admin can update just one category at a time;
+    total_capacity is recomputed server-side as the sum of the three.
+    """
+    employee_capacity: Optional[int] = Field(default=None, ge=0)
+    vendor_capacity: Optional[int] = Field(default=None, ge=0)
+    visitor_capacity: Optional[int] = Field(default=None, ge=0)
 
 
 class DetectionEvent(BaseModel):

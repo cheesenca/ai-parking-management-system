@@ -1,17 +1,7 @@
 'use client';
+
 import { useState, useEffect, useCallback } from 'react';
-import {
-  AreaChart, 
-  Area, 
-  BarChart, 
-  Bar,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Legend,
-} from 'recharts';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { RefreshCw, Download } from 'lucide-react';
 import { apiForecastZones, apiForecastDashboard, apiOccupancyHistory } from '@/lib/backendApi';
 import type { ZoneCapacity, ForecastDay, OccupancyPoint } from '@/lib/types';

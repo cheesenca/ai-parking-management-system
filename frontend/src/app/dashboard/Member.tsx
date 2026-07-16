@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import type { Member, Zone, Category } from '@/lib/types';
-import { apiGetMembers, apiCreateMember, apiUpdateMember, apiDeleteMember } from '@/lib/backendApi';
-import { Plus, Pencil, Trash2, X, Check, Search, Download, RefreshCw } from 'lucide-react';
+import { apiGetMembers, apiCreateMember, apiUpdateMember, apiDeleteMember, apiImportMembers } from '@/lib/backendApi';
+import { Plus, Pencil, Trash2, X, Check, Search, Download, Upload, RefreshCw } from 'lucide-react';
 
 const zoneLabels: Record<Zone | 'All', string> = {
   All: 'All Zones', 
@@ -65,6 +66,8 @@ export default function MembersPage() {
   const [editMember, setEditMember] = useState<Member | null>(null);
   const [form, setForm] = useState<Omit<Member, 'member_id' | 'position' | 'last_in' | 'last_out'>>(EMPTY_MEMBER);
   const [formError, setFormError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMembers = useCallback(async () => {
     setLoading(true); setError('');
@@ -155,16 +158,96 @@ export default function MembersPage() {
   const toggleAll = () =>
     setSelected(s => s.length === filtered.length ? [] : filtered.map(m => m.member_id));
 
-  const exportCSV = () => {
-    const rows = [
-      ['KPK', 'Name', 'Zone', 'Category', 'Plate 1', 'Plate 2', 'Type 1', 'Type 2', 'SIM Exp', 'STNK Exp', 'Position'],
-      ...data.map(m => [m.kpk_number, m.name, m.registered_plant, m.category, m.plate_1, m.plate_2||'', m.vehicle_type_1, m.vehicle_type_2||'', m.sim_exp, m.stnk_exp_1, m.position]),
+  const exportExcel = () => {
+    const rows = data.map(m => ({
+      KPK: m.kpk_number,
+      Name: m.name,
+      Zone: m.registered_plant,
+      Category: m.category,
+      'Plate 1': m.plate_1,
+      'Plate 2': m.plate_2 || '',
+      'Type 1': m.vehicle_type_1,
+      'Type 2': m.vehicle_type_2 || '',
+      'SIM Exp': m.sim_exp,
+      'STNK Exp': m.stnk_exp_1,
+      Position: m.position,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+      { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 8 },
     ];
-    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `aips_members_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Members');
+    XLSX.writeFile(wb, `aips_members_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const IMPORT_KEY_MAP: Record<string, keyof Omit<Member, 'member_id' | 'position' | 'last_in' | 'last_out'>> = {
+    kpk: 'kpk_number', kpknumber: 'kpk_number', kpkno: 'kpk_number',
+    name: 'name', fullname: 'name',
+    zone: 'registered_plant', plant: 'registered_plant', registeredplant: 'registered_plant',
+    category: 'category',
+    plate1: 'plate_1',
+    plate2: 'plate_2',
+    type1: 'vehicle_type_1', vehicletype1: 'vehicle_type_1',
+    type2: 'vehicle_type_2', vehicletype2: 'vehicle_type_2',
+    simexp: 'sim_exp',
+    stnkexp: 'stnk_exp_1', stnkexp1: 'stnk_exp_1',
+  };
+
+  const normalizeKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true); setError('');
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+
+      const rows = raw.map(r => {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(r)) {
+          const mapped = IMPORT_KEY_MAP[normalizeKey(k)];
+          if (mapped) out[mapped] = String(v ?? '').trim();
+        }
+        return out;
+      }).filter(r => r.kpk_number && r.name && r.plate_1);
+
+      if (rows.length === 0) {
+        setError('No valid rows found. Expecting columns like KPK, Name, Zone, Category, Plate 1, Plate 2, Type 1, Type 2, SIM Exp, STNK Exp.');
+        return;
+      }
+
+      const payload = rows.map(r => ({
+        kpk_number: r.kpk_number,
+        name: r.name,
+        registered_plant: (r.registered_plant || 'west') as Zone,
+        category: (r.category || 'Employee') as Category,
+        sim_exp: r.sim_exp || undefined,
+        plate_1: r.plate_1,
+        vehicle_type_1: r.vehicle_type_1 || 'Car',
+        stnk_exp_1: r.stnk_exp_1 || undefined,
+        plate_2: r.plate_2 || undefined,
+        vehicle_type_2: r.vehicle_type_2 || undefined,
+      }));
+
+      const result = await apiImportMembers(payload);
+      if (result.errors?.length) {
+        setError(`Imported ${result.created} member(s). ${result.errors.length} row(s) skipped: ${result.errors.slice(0, 5).join('; ')}${result.errors.length > 5 ? '…' : ''}`);
+      }
+      void fetchMembers();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const onImportInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void handleImportFile(file);
+    e.target.value = '';
   };
 
   const FIELDS = [
@@ -193,8 +276,18 @@ export default function MembersPage() {
             <button onClick={() => void fetchMembers()} className="btn-secondary" style={{ fontSize: 12 }} disabled={loading}>
               <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             </button>
-            <button onClick={exportCSV} className="btn-secondary" style={{ fontSize: 12 }}>
-              <Download size={13} /> Export CSV
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              onChange={onImportInputChange}
+            />
+            <button onClick={() => fileInputRef.current?.click()} className="btn-secondary" style={{ fontSize: 12 }} disabled={importing}>
+              <Upload size={13} /> {importing ? 'Importing…' : 'Import Excel'}
+            </button>
+            <button onClick={exportExcel} className="btn-secondary" style={{ fontSize: 12 }}>
+              <Download size={13} /> Export Excel
             </button>
             {selected.length > 0 && (
               <button onClick={() => void handleDelete(selected)} className="btn-secondary"
@@ -318,8 +411,6 @@ export default function MembersPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
-            {/* overflowY: 'auto' TELAH DIHAPUS dari sini agar form tidak bisa discroll */}
             <div style={{ padding: '24px' }}>
               {formError && (
                 <div style={{ padding: '10px 14px', borderRadius: 9, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)', color: 'var(--danger-text)', fontSize: 13, marginBottom: 16 }}>
