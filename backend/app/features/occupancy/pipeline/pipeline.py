@@ -1,27 +1,33 @@
 from __future__ import annotations
+
 import cv2
 import logging
 import numpy as np
 import sys, time, argparse, threading, requests
 from pathlib import Path
 from datetime import datetime
-from collections import defaultdict
-from app.core.config import settings, OCCUPANCY_MODEL_PATH, PARKING_MAP_JSON
+
+from app.core.config import settings
+from app.core.database import SessionLocal
+from app.core.models import ParkingZone
+from app.features.occupancy.services.occupancy import load_parking_map, compute_iou
 
 logger = logging.getLogger(__name__)
 
-# Bootstrap sys.path
+COLOR_AVAIL = (30, 200, 60)
+COLOR_OCC = (30, 60, 220)
+SMOOTHING_WINDOW = 5
+
 def _bootstrap(f):
+    """
+    Bootstrap sys.path
+    """
     for p in Path(f).resolve().parents:
         if (p / "requirements.txt").exists() and (p / "app").is_dir():
             if str(p) not in sys.path: sys.path.insert(0, str(p))
             break
+        
 _bootstrap(__file__)
-
-from app.features.occupancy.services.occupancy import (
-    load_parking_map,
-    compute_iou,
-)
 
 try:
     import torch
@@ -29,26 +35,24 @@ try:
 except ImportError:
     DEVICE = "cpu"
 
-CATEGORY_TOTAL = {"Employee": 100, "Vendor": 20, "Visitor": 10}
-COLOR_AVAIL = (30, 200,  60)
-COLOR_OCC = (30,  60, 220)
-
-# How many consecutive frames a status must persist before it's accepted.
-# Prevents the "naik turun naik turun" flicker caused by frame-to-frame noise.
-SMOOTHING_WINDOW = 5
-
 
 class SlotSmoother:
     """
-    Tracks recent status history per slot and only reports a status
-    once it's been the majority result for the last SMOOTHING_WINDOW frames.
+    Tracks recent status history per slot
     """
     def __init__(self, slot_ids: list[str], window: int = SMOOTHING_WINDOW):
+        """
+        SlotSmoother initialization
+        """
         self.window = window
         self.history: dict[str, list[str]] = {sid: [] for sid in slot_ids}
         self.stable: dict[str, str] = {sid: "Available" for sid in slot_ids}
 
+
     def update(self, raw_status: dict[str, str]) -> dict[str, str]:
+        """
+        Updates status history and computes the stable status from a >50% majority
+        """
         for sid, status in raw_status.items():
             hist = self.history.setdefault(sid, [])
             hist.append(status)
@@ -69,6 +73,7 @@ class Camera:
         self._f, self._lock, self._stop = None, threading.Lock(), threading.Event()
         threading.Thread(target=self._loop, daemon=True).start()
 
+
     def _loop(self):
         """
         Continuous background frame capture cycle
@@ -80,12 +85,14 @@ class Camera:
             else:
                 time.sleep(0.01)
 
+
     def read(self):
         """
         Captures a copy of the latest frame without blocking the main thread
         """
         with self._lock:
             return self._f is not None, (self._f.copy() if self._f is not None else None)
+
 
     def release(self):
         """
@@ -106,9 +113,7 @@ def enhance(frame: np.ndarray) -> np.ndarray:
 
 def draw(frame: np.ndarray, parking_map: dict, slot_status: dict[str, str], fps: float) -> np.ndarray:
     """
-    Draw the FIXED slot polygons (from parking_map.json) colour-coded by their
-    smoothed status. Unlike raw detection boxes, these polygons never move
-    frame-to-frame, so the overlay stays visually stable.
+    Draw the fixed slot polygons from parking_map.json colour-coded by their smoothed status
     """
     out = frame.copy()
     h, w = out.shape[:2]
@@ -135,8 +140,7 @@ def draw(frame: np.ndarray, parking_map: dict, slot_status: dict[str, str], fps:
     ov = out.copy()
     cv2.rectangle(ov, (0, 0), (w, 42), (20, 20, 20), -1)
     cv2.addWeighted(ov, 0.72, out, 0.28, 0, out)
-    cv2.putText(out, f"{zone.upper()} - Occupied: {occupied}/{total}  Free: {total - occupied}",
-                (8, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+    cv2.putText(out, f"{zone.upper()} - Occupied: {occupied}/{total}  Free: {total - occupied}", (8, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
     t = f"{fps:.0f} fps"
     (fw, fh), _ = cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
@@ -147,10 +151,7 @@ def draw(frame: np.ndarray, parking_map: dict, slot_status: dict[str, str], fps:
 
 def detect_slots(model, frame: np.ndarray, parking_map: dict, conf: float, iou_thresh: float) -> dict[str, str]:
     """
-    Run YOLO on the full frame, then map each vehicle detection to a FIXED
-    slot polygon using IoU overlap - not by sorting detection order.
-    This is the same logic as occupancy.detect_occupancy(), inlined here
-    to avoid re-running inference twice per frame.
+    Run YOLO on the full frame and map each vehicle detection to a fixed slot polygon using IoU overlap
     """
     results = model(
         frame,
@@ -173,20 +174,41 @@ def detect_slots(model, frame: np.ndarray, parking_map: dict, conf: float, iou_t
     return raw_status
 
 
-def push(zone: str, slot_status: dict[str, str], id2cat: dict[str, str]):
+def get_category_totals(zone: str) -> dict[str, int]:
     """
-    Aggregating occupancy summaries by category and sending them (HTTP POST) to the backend server API asynchronously
+    Retrieve total capacity datafor each category within a specific zone directly from the database
+    """
+    db = SessionLocal()
+    try:
+        z = db.query(ParkingZone).filter(ParkingZone.zone_key == zone).first()
+        if not z:
+            logger.warning(f"Zone '{zone}' not found in DB; category totals default to 0")
+            return {"Employee": 0, "Vendor": 0, "Visitor": 0}
+        return {
+            "Employee": z.employee_capacity,
+            "Vendor": z.vendor_capacity,
+            "Visitor": z.visitor_capacity,
+        }
+    finally:
+        db.close()
+
+
+def push(zone: str, slot_status: dict[str, str], id2cat: dict[str, str], category_total: dict[str, int]):
+    """
+    Aggregating occupancy summaries by category and sending HTTP POST to the backend server API asynchronously
     """
     cats: dict[str, dict] = {}
     for sid, st in slot_status.items():
         cat = id2cat.get(sid, "Employee")
         if cat not in cats:
-            cats[cat] = {"used": 0, "total": CATEGORY_TOTAL.get(cat, 0), "available": 0, "rate_pct": 0}
+            cats[cat] = {"used": 0, "total": category_total.get(cat, 0), "available": 0, "rate_pct": 0}
         if st == "Occupied":
             cats[cat]["used"] += 1
+
     for cat, d in cats.items():
         d["available"] = max(0, d["total"] - d["used"])
         d["rate_pct"] = round(d["used"] / d["total"] * 100, 1) if d["total"] else 0.0
+
     try:
         r = requests.post(f"{settings.BACKEND_URL}/api/slots/update", timeout=0.8, json={
             "zone": zone,
@@ -208,23 +230,27 @@ def run(source: str, zone: str = "west", conf: float | None = None):
     conf = conf if conf is not None else settings.YOLO_CONF
     iou_thresh = settings.IOU_THRESHOLD
 
-    logger.info(f"Device: {DEVICE.upper()}")
-    logger.info(f"Model: {OCCUPANCY_MODEL_PATH}")
+    logger.info(f"Device: {settings.DEVICE.upper()}")
+    logger.info(f"Model: {settings.OCCUPANCY_MODEL_PATH}")
     logger.info(f"Conf: {conf}  IoU threshold: {iou_thresh}  Smoothing window: {SMOOTHING_WINDOW}")
 
-    parking_map = load_parking_map(PARKING_MAP_JSON)
+    parking_map = load_parking_map(settings.PARKING_MAP_JSON)
     slot_ids = [s["id"] for s in parking_map["slots"]]
     id2cat = {s["id"]: s.get("category", "Employee") for s in parking_map["slots"]}
     smoother = SlotSmoother(slot_ids)
 
+    category_total = get_category_totals(zone)
+    logger.info(f"Category totals for zone '{zone}': {category_total}")
+
     from ultralytics import YOLO
+    
     t0 = time.time()
-    model = YOLO(str(OCCUPANCY_MODEL_PATH))
-    model.to(DEVICE)
+    model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+    model.to(settings.DEVICE)
     logger.info(f"Model loaded {time.time()-t0:.1f}s")
 
-    if DEVICE == "cuda":
-        model(np.zeros((480, 640, 3), dtype=np.uint8), device=DEVICE, verbose=False)
+    if settings.DEVICE == "cuda":
+        model(np.zeros((480, 640, 3), dtype=np.uint8), device=settings.DEVICE, verbose=False)
         logger.info("GPU warm-up OK")
 
     src = int(source) if source.isdigit() else source
@@ -236,8 +262,8 @@ def run(source: str, zone: str = "west", conf: float | None = None):
         cam.release(); return
 
     logger.info("Active Camera. q=exit, +/-=confidence configuration")
-    cv2.namedWindow("AIPS - Live Occupancy Monitor", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("AIPS - Live Occupancy Monitor", 960, 540)
+    cv2.namedWindow("Live Occupancy Monitor", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Live Occupancy Monitor", 960, 540)
 
     last_push = 0.0
     fps_t = time.time(); fps_n = 0; fps = 0.0
@@ -259,11 +285,11 @@ def run(source: str, zone: str = "west", conf: float | None = None):
         fps_n += 1
         if fps_n >= 15:
             fps = fps_n / (time.time() - fps_t); fps_t = time.time(); fps_n = 0
-        cv2.imshow("AIPS - Live Occupancy Monitor", draw(frame, parking_map, stable_status, fps))
+        cv2.imshow("Live Occupancy Monitor", draw(frame, parking_map, stable_status, fps))
 
         now = time.time()
         if now - last_push >= 0.5:
-            threading.Thread(target=push, args=(zone, stable_status, id2cat), daemon=True).start()
+            threading.Thread(target=push, args=(zone, stable_status, id2cat, category_total), daemon=True).start()
             last_push = now
 
         key = cv2.waitKey(1) & 0xFF

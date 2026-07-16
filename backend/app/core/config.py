@@ -76,30 +76,13 @@ class Settings(BaseSettings):
 # Initialize Settings
 settings = Settings()
 
-# Feature: Slot Occupancy 
-FEATURE_ROOT = settings.SLOT_ROOT
-PARKING_MAP_JSON = settings.PARKING_MAP_JSON
-
-# Model Files
-OCCUPANCY_MODEL_PATH = settings.OCCUPANCY_MODEL_PATH
-OCR_MODEL_PATH = settings.OCR_MODEL_PATH
-ARIMA_MODEL_PATH = settings.ARIMA_MODEL_PATH
-PROPHET_MODEL_PATH = settings.PROPHET_MODEL_PATH
-
-# YOLO & Inference Hyperparameters
-YOLO_BASE_MODEL = settings.YOLO_BASE_MODEL
-YOLO_DEVICE = settings.YOLO_DEVICE
-YOLO_IMGSZ = settings.YOLO_IMGSZ
-VEHICLE_CLASSES = settings.VEHICLE_CLASSES
-YOLO_CONF = settings.YOLO_CONF
-YOLO_IOU_NMS = settings.YOLO_IOU_NMS
-IOU_THRESHOLD = settings.IOU_THRESHOLD
 
 def create_required_directories() -> None:
     """
     Ensures all required system directories exist before application startup
     """
     directories = [
+        settings.SLOT_ROOT,
         settings.SLOT_DATA_DIR,
         settings.MODELS_DIR,
         settings.LOGS_DIR,

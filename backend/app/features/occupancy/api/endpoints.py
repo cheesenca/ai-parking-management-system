@@ -5,7 +5,6 @@ import json
 import asyncio
 import base64
 import logging
-import requests
 import numpy as np
 from datetime import datetime
 from pathlib import Path
@@ -17,14 +16,21 @@ from ultralytics import YOLO
 from app.core.config import settings
 from app.core.database import get_db, SessionLocal
 from app.core.models import EntryExitLog, OccupancySnapshot, ParkingSlot, ParkingZone, ParkingSession
-from app.features.occupancy.schemas.slots import CategoryInfo, DetectionEvent, SlotItem, ZoneUpdate, CapacityUpdate
+from app.features.occupancy.schemas.slots import CategoryInfo, DetectionEvent, ZoneUpdate, CapacityUpdate
 from app.features.occupancy.services.occupancy import SlotSmoother
 from app.features.auth.api import get_current_user
 
 logger = logging.getLogger(__name__)
 
-# Bootstrap sys.path
+router = APIRouter()
+ws_router = APIRouter(tags=["WebSocket"])
+
+_slot_model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+
 def _bootstrap(f: str) -> None:
+    """
+    Bootstrap sys.path
+    """
     p = Path(f).resolve()
     proj = None
     for parent in p.parents:
@@ -33,36 +39,33 @@ def _bootstrap(f: str) -> None:
             break
     if proj and str(proj) not in sys.path:
         sys.path.insert(0, str(proj))
+
 _bootstrap(__file__)
 
-router = APIRouter()
-ws_router = APIRouter(tags=["WebSocket"])
-
-# Slot layout mirrors frontend's slotData.ts grid
 def _build_layout(prefix: str) -> list[dict]:
+    """
+    Slot layout mirrors frontend's slotData.ts grid
+    """
     layout: list[dict] = []
-    for c in range(1, 11): layout.append({"id": f"{prefix}1-{c}", "category": "Employee"})
-    for c in range(1, 11): layout.append({"id": f"{prefix}2-{c}", "category": "Employee"})
-    for c in range(1, 9): layout.append({"id": f"{prefix}3-{c}", "category": "Vendor"})
-    for c in range(1, 6): layout.append({"id": f"{prefix}4-{c}", "category": "Visitor"})
+    for c in range(1, 11): 
+        layout.append({"id": f"{prefix}1-{c}", "category": "Employee"})
+    for c in range(1, 11): 
+        layout.append({"id": f"{prefix}2-{c}", "category": "Employee"})
+    for c in range(1, 9): 
+        layout.append({"id": f"{prefix}3-{c}", "category": "Vendor"})
+    for c in range(1, 6): 
+        layout.append({"id": f"{prefix}4-{c}", "category": "Visitor"})
     return layout
 
 SLOT_LAYOUTS: dict[str, list[dict]] = {"west": _build_layout("W"), "east": _build_layout("E")}
 SLOT_LAYOUTS["eastwest"] = SLOT_LAYOUTS["west"] + SLOT_LAYOUTS["east"]
 
-# --- Camera routing per zone -------------------------------------------------
-# Today there is physically only ONE slot-scanner camera (device "0"), so every
-# zone is routed to it. The mapping exists so adding a real East Plant / East&
-# West Plant camera later is a one-line change here (nowhere else) - the
-# frontend zone switcher, the WS route, and the DB writes are already
-# zone-aware and don't need to change.
 ZONE_CAMERA_DEVICE: dict[str, str] = {
     "west": "0",
-    "east": "0",      # TODO: point to the East Plant camera once installed
-    "eastwest": "0",  # TODO: point to the East&West Plant camera once installed
+    "east": "0",      
+    "eastwest": "0",  
 }
 
-CATEGORY_TOTAL = {"Employee": 100, "Vendor": 20, "Visitor": 10}
 COLOR_AVAIL = (30, 200, 60)
 COLOR_OCC = (30, 60, 220)
 
@@ -72,20 +75,18 @@ CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
 
 def _load_reference_thumb(zone_key: str):
     """
-    Loads the saved calibration reference image and precomputes ORB
-    keypoints/descriptors for it, so each incoming frame only needs to
-    compute its own descriptors and match against these cached ones.
-    Also remembers how much the reference was downscaled for ORB, so
-    calibration-space polygon points (drawn against the FULL-size
-    reference image) can later be mapped into this same coordinate space.
+    Loads the stored calibration reference image and pre-computes keypoints and descriptors using the ORB algorithm
     """
     import cv2
+
     path = _reference_image_path(zone_key)
     if not path.exists():
         return None
+    
     ref = cv2.imread(str(path))
     if ref is None:
         return None
+    
     gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape[:2]
     thumb_scale = 480 / w
@@ -97,30 +98,10 @@ def _load_reference_thumb(zone_key: str):
 
 def _estimate_alignment(frame, ref_data, min_good_matches: int = 12):
     """
-    Checks whether the current camera frame looks like the same physical
-    scene the calibration reference photo was taken from, AND - if so -
-    computes a homography that maps points from the calibration reference
-    image's pixel space directly into the CURRENT frame's pixel space.
-
-    Uses ORB feature matching (keypoints + descriptors + Lowe's ratio test)
-    rather than raw pixel-to-pixel correlation, which is extremely fragile
-    in practice: even a few degrees of rotation or a couple percent of zoom
-    - completely normal when a camera drifts or is repositioned - collapses
-    a raw correlation score toward zero even though it's obviously the same
-    place. Feature matching instead looks for the same distinctive visual
-    landmarks (corners, edges, textures) regardless of their exact pixel
-    position, and RANSAC then fits the actual rotation/scale/translation
-    (even mild perspective skew) between the two views. That transform is
-    what lets the fixed calibrated polygons "follow" the parking lot as the
-    camera drifts, instead of staying glued to the exact pixels they were
-    originally drawn at.
-
-    Returns (aligned, good_match_count, homography|None). homography maps a
-    point in the ORIGINAL full-size reference image (the same coordinate
-    space the saved slot polygons are stored in) to a point in the current
-    frame at its own full resolution.
+    Checks if the current camera frame matches the calibration reference and computes the homography matrix
     """
     import cv2
+
     if ref_data is None or ref_data.get("des") is None:
         return False, 0, None
 
@@ -146,11 +127,6 @@ def _estimate_alignment(frame, ref_data, min_good_matches: int = 12):
     if H_thumb is None or mask is None or int(mask.sum()) < min_good_matches:
         return False, len(good), None
 
-    # Compose: full-size calibration image px -> resized ref-thumb px
-    # (via the reference's own downscale) -> resized frame-thumb px (via
-    # the ORB homography) -> full-size CURRENT frame px (via the inverse
-    # of this frame's downscale). Net result maps calibration-space points
-    # straight to where they now sit in the raw, full-resolution frame.
     s_ref = ref_data["thumb_scale"]
     s_frame_inv = 1.0 / frame_scale
     S_ref = np.array([[s_ref, 0, 0], [0, s_ref, 0], [0, 0, 1]], dtype=np.float64)
@@ -160,9 +136,11 @@ def _estimate_alignment(frame, ref_data, min_good_matches: int = 12):
 
 
 def _warp_calibration(calibration: List[dict], H) -> List[dict]:
-    """Warps each saved slot polygon through the homography so it lands on
-    the parking lot's actual current position/orientation in the live frame."""
+    """
+    Transforms the calibrated parking slot polygon to align with the current live frame using the homography matrix
+    """
     import cv2
+    
     warped = []
     for s in calibration:
         pts = np.array(s["polygon"], dtype=np.float32).reshape(-1, 1, 2)
@@ -172,17 +150,27 @@ def _warp_calibration(calibration: List[dict], H) -> List[dict]:
 
 
 def _calibration_path(zone_key: str) -> Path:
+    """
+    Get the JSON file path where the calibrated slot polygon coordinates are stored
+    """
     return CALIBRATION_DIR / f"{zone_key}.json"
 
 
 def _reference_image_path(zone_key: str) -> Path:
+    """
+    Obtaining the file path of the image used as the reference for the initial calibration photo
+    """
     return CALIBRATION_DIR / f"{zone_key}_reference.jpg"
 
 
 def _load_calibration(zone_key: str) -> Optional[List[dict]]:
+    """
+    Loads stored parking slot polygon calibration data from a JSON file
+    """
     path = _calibration_path(zone_key)
     if not path.exists():
         return None
+    
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         slots = data.get("slots", [])
@@ -192,13 +180,18 @@ def _load_calibration(zone_key: str) -> Optional[List[dict]]:
 
 
 def _save_calibration(zone_key: str, slots: List[dict]) -> None:
+    """
+    Save the newly calibrated parking slot polygon coordinate data to a JSON file
+    """
     _calibration_path(zone_key).write_text(
         json.dumps({"zone": zone_key, "slots": slots}, indent=2), encoding="utf-8"
     )
 
 
 def _point_in_polygon(x: float, y: float, polygon: List[List[float]]) -> bool:
-    """Standard ray-casting point-in-polygon test."""
+    """
+    Standard ray-casting point-in-polygon test
+    """
     inside = False
     n = len(polygon)
     j = n - 1
@@ -212,7 +205,9 @@ def _point_in_polygon(x: float, y: float, polygon: List[List[float]]) -> bool:
 
 
 def _map_to_slots_calibrated(dets: List[dict], calibration: List[dict]) -> Dict[str, str]:
-    """Assign each detection to the fixed slot polygon its box-center falls inside."""
+    """
+    Assign each detection to the fixed slot polygon its box-center falls inside
+    """
     status = {s["id"]: "Available" for s in calibration}
     best_conf: Dict[str, float] = {}
     for d in dets:
@@ -225,25 +220,33 @@ def _map_to_slots_calibrated(dets: List[dict], calibration: List[dict]) -> Dict[
                 break
     return status
 
-_slot_model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+
 def _get_slot_model():
-    """Lazily load and cache the YOLOv8 occupancy model (pklot.pt)."""
+    """
+    Lazily load and cache the YOLOv8 occupancy model
+    """
     global _slot_model
     if _slot_model is not None:
         return _slot_model
+    
     try:
         from ultralytics import YOLO
         from app.core.config import OCCUPANCY_MODEL_PATH
+
         _slot_model = YOLO(str(OCCUPANCY_MODEL_PATH))
-        logger.info("[SLOT WS] Occupancy model loaded successfully")
+        logger.info("Occupancy model loaded successfully")
         return _slot_model
     except Exception as exc:
-        logger.error(f"[SLOT WS] Occupancy model unavailable: {exc}")
+        logger.error(f"Occupancy model unavailable: {exc}")
         return None
 
 
 def _enhance(frame):
+    """
+    Dynamically enhancing local image contrast using the CLAHE method in the LAB color space
+    """
     import cv2
+
     lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     l = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(l)
@@ -252,12 +255,10 @@ def _enhance(frame):
 
 def _draw_calibrated_slots(frame, calibration: List[dict], status: Dict[str, str]):
     """
-    Draws the FIXED calibrated slot polygons (not the raw, wobbly YOLO boxes).
-    Each slot polygon stays glued to the same pixels every frame - only its
-    fill color/label changes with the smoothed status - so the on-screen
-    overlay is as stable as the calibration itself.
+    Drawing calibrated parking slot polygons onto the live frame based on availability status
     """
     import cv2
+
     out = frame.copy()
     for s in calibration:
         pts = [(int(x), int(y)) for x, y in s["polygon"]]
@@ -269,7 +270,7 @@ def _draw_calibrated_slots(frame, calibration: List[dict], status: Dict[str, str
         cv2.addWeighted(ov, 0.28, out, 0.72, 0, out)
         cv2.polylines(out, [np.array(pts, dtype=np.int32)], True, color, 2)
 
-        txt = f'{s["id"]} · {label}'
+        txt = f'{s["id"]} - {label}'
         tx, ty = pts[0]
         (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
         cv2.rectangle(out, (tx, max(0, ty - th - 8)), (tx + tw + 6, ty), color, -1)
@@ -279,19 +280,10 @@ def _draw_calibrated_slots(frame, calibration: List[dict], status: Dict[str, str
 
 def _draw_notice(frame, message: str):
     """
-    Shown whenever we do NOT have a trustworthy, calibrated read on the
-    scene - the zone has never been calibrated, or the camera isn't
-    currently pointed at the same view the calibration was made from.
-
-    Deliberately does NOT run the detector or draw any boxes here. A
-    general-purpose slot model pointed at an unexpected scene (a hand, an
-    empty desk, a different angle) will happily produce confident-looking
-    "Available"/"Occupied" boxes on things that aren't parking slots at
-    all - so once a zone is calibrated, that raw/free-floating detection
-    path is retired entirely. A dimmed frame + a plain status message is
-    more honest than a bounding box the operator has no way to trust.
+    Displays a notification message in the center of the screen while dimming the entire camera video frame
     """
     import cv2
+
     out = (frame.astype(np.float32) * 0.35).astype(np.uint8)
     h, w = out.shape[:2]
     (tw, th), _ = cv2.getTextSize(message, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
@@ -301,7 +293,9 @@ def _draw_notice(frame, message: str):
 
 
 def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dict]) -> None:
-    """Write live detection results directly into the DB — same effect as POST /api/slots/update."""
+    """
+    Storing or updating live status data from parking slot detection directly into the database
+    """
     id2cat = {s["id"]: s["category"] for s in layout}
     db = SessionLocal()
     try:
@@ -316,6 +310,7 @@ def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dic
                 ParkingSlot.zone_id == zone.zone_id,
                 ParkingSlot.slot_label == sid,
             ).first()
+
             if slot:
                 slot.current_status = st
                 slot.category = cat
@@ -324,6 +319,7 @@ def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dic
                     zone_id=zone.zone_id, slot_label=sid, category=cat,
                     current_status=st, coordinates_polygon=[],
                 ))
+
             if st == "Occupied":
                 used_by_cat[cat] = used_by_cat.get(cat, 0) + 1
 
@@ -334,7 +330,7 @@ def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dic
         db.commit()
     except Exception as e:
         db.rollback()
-        logger.error(f"[SLOT WS] DB write failed: {e}")
+        logger.error(f"Database write failed: {e}")
     finally:
         db.close()
 
@@ -348,16 +344,7 @@ async def slots_camera_ws(
     conf: float = Query(default=0.25),
 ):
     """
-    Streams the parking-slot camera feed with live occupancy bounding boxes
-    (YOLOv8 / pklot.pt) and persists the detected status into the database,
-    so the existing GET /api/slots/live polling reflects it automatically.
-
-    Camera source is resolved from `ZONE_CAMERA_DEVICE[zone]` rather than
-    blindly trusting whatever `camera_index` the client passes. Right now
-    every zone maps to the single physical camera (device "0"); once East
-    Plant / East&West Plant get their own cameras, only that mapping needs
-    to change. `camera_index` is still accepted as an explicit override for
-    testing (e.g. against a video file) but is no longer required.
+    WebSocket endpoint for streaming live visualizations of parking slot occupancy status in real-time and asynchronous
     """
     await websocket.accept()
     loop = asyncio.get_event_loop()
@@ -380,24 +367,20 @@ async def slots_camera_ws(
     source = int(resolved_source) if str(resolved_source).isdigit() else resolved_source
 
     def _open_camera():
-        # On Windows, OpenCV defaults to the MSMF backend for webcams, which
-        # is known to open successfully but then fail on the very first
-        # cap.read() with an opaque error (-1072875772) on many consumer
-        # webcams/drivers. DirectShow (CAP_DSHOW) is far more reliable for
-        # this - it's what the offline pipeline.py already uses, which is
-        # why that one was stable while this live endpoint wasn't.
+        """
+        Internal function to open the camera hardware or a video stream file
+        """
         if isinstance(source, int):
             c = cv2.VideoCapture(source, cv2.CAP_DSHOW)
             if not c.isOpened():
                 c.release()
-                c = cv2.VideoCapture(source)  # fall back to default backend
+                c = cv2.VideoCapture(source) 
         else:
             c = cv2.VideoCapture(source)
+
         if c.isOpened():
-            # Some webcams need a brief moment after opening before they can
-            # actually deliver a frame - warm up with a few throwaway reads
-            # instead of trusting isOpened() alone.
             import time
+
             for _ in range(5):
                 ok, _ = c.read()
                 if ok:
@@ -411,9 +394,6 @@ async def slots_camera_ws(
         await websocket.close()
         return
 
-    # Smooths raw per-frame detections into a stable status per slot so the
-    # overlay stops flip-flopping between Occupied/Available frame to frame -
-    # a slot only changes once the new state has been consistently observed.
     calibration = _load_calibration(zone)
     ref_thumb = await loop.run_in_executor(None, _load_reference_thumb, zone) if calibration else None
     slot_ids = [s["id"] for s in (calibration or layout)]
@@ -427,20 +407,14 @@ async def slots_camera_ws(
             ret, frame = await loop.run_in_executor(None, cap.read)
             if not ret:
                 consecutive_failures += 1
-                logger.warning(f"[SLOT WS] Frame read failed ({consecutive_failures}/10).")
+                logger.warning(f"Frame read failed ({consecutive_failures}/10).")
                 if consecutive_failures >= 10:
-                    logger.error("[SLOT WS] Too many consecutive failed reads. Disconnecting.")
+                    logger.error("Too many consecutive failed reads, disconnecting.")
                     break
                 await asyncio.sleep(0.1)
                 continue
             consecutive_failures = 0
 
-            # Only trust/show the calibrated polygons once the camera is
-            # actually pointed at the same scene that was calibrated. If a
-            # reference photo isn't available, we CANNOT verify alignment, so
-            # we default to NOT aligned rather than trusting it blindly - a
-            # calibration without a reference photo should never be shown as
-            # "active" just because we have no way to check it.
             aligned = False
             align_score = None
             live_calibration = None
@@ -450,21 +424,13 @@ async def slots_camera_ws(
                     live_calibration = await loop.run_in_executor(None, _warp_calibration, calibration, H)
             use_calibration = bool(calibration and live_calibration)
 
-            # Surface the match count (throttled to ~once/sec) so an
-            # operator aiming the camera at the calibrated scene can see
-            # exactly how close they are to the 12-match threshold in the
-            # backend console, instead of only getting a silent pass/fail.
             if align_score is not None and (loop.time() - last_align_log) >= 1.0:
                 logger.info(
-                    f"[SLOT WS] zone={zone} good_feature_matches={align_score} "
+                    f"zone={zone} good_feature_matches={align_score} "
                     f"(need >= 12, aligned={use_calibration})"
                 )
                 last_align_log = loop.time()
 
-            # The detector only ever runs once we know it's looking at the
-            # calibrated scene. No calibration yet, or camera not aligned ->
-            # skip inference completely, don't draw anything the operator
-            # can't trust, and don't touch the DB with guessed statuses.
             if use_calibration:
                 def _infer():
                     enhanced = _enhance(frame)
@@ -490,7 +456,11 @@ async def slots_camera_ws(
                 dets = []
                 status = {}
 
+
             def _encode():
+                """
+                Drawing a visual graphic overlay onto an image and compressing it into a base64-encoded JPEG string
+                """
                 if use_calibration:
                     drawn = _draw_calibrated_slots(frame, live_calibration, status)
                 elif calibration is None:
@@ -519,10 +489,9 @@ async def slots_camera_ws(
             })
             await asyncio.sleep(0.05)
     except WebSocketDisconnect:
-        logger.info("[SLOT WS] Client disconnected.")
+        logger.info("Client disconnected.")
     finally:
         cap.release()
-
 
 
 # GET /api/slots/live?zone=west
@@ -557,7 +526,7 @@ def get_live_slots(
     is_anomaly = ghost_count > 0
 
     if is_anomaly:
-        logger.warning(f"[ALERT] Zone {zone}: Detection of {ghost_count} unidentified vehicles/vehicles that bypassed OCR in the parking area!")
+        logger.warning(f"Zone {zone}: Detection of {ghost_count} unidentified vehicles/vehicles that bypassed OCR in the parking area!")
 
     return {
         "zone": zone,
@@ -573,7 +542,7 @@ def get_live_slots(
         "overall_rate_pct": dashboard["overall_rate_pct"],
         "valid_sessions": valid_sessions_count,
         "ghost_vehicles": ghost_count,
-        "anomaly": is_anomaly
+        "anomaly": is_anomaly,
     }
 
 
@@ -581,9 +550,7 @@ def get_live_slots(
 @router.get("/calibration/{zone_key}/defaults")
 def calibration_defaults(zone_key: str, current_user=Depends(get_current_user)):
     """
-    Returns the zone's slot-ID/category list plus any already-saved
-    calibration, without touching the camera. Used when the admin calibrates
-    from an uploaded photo instead of a live snapshot.
+    Retrieving default slot layout data and stored slot polygon calibration data for a specific zone 
     """
     if zone_key not in SLOT_LAYOUTS:
         raise HTTPException(status_code=404, detail=f"Unknown zone '{zone_key}'")
@@ -594,19 +561,12 @@ def calibration_defaults(zone_key: str, current_user=Depends(get_current_user)):
     }
 
 
-# NOTE: the old GET /calibration/{zone_key}/snapshot endpoint (grabbing a
-# frame directly from the camera for calibration) has been removed. It was
-# opening the same physical camera device the live Slot Occupancy feature
-# uses, which caused the two to lock each other out. Calibration now only
-# supports the "Upload Photo" flow (see /calibration/{zone_key}/defaults
-# below), which never touches the camera - so the camera stays fully
-# available to Slot Occupancy at all times.
-
-
 # GET /api/slots/calibration/{zone_key}
 @router.get("/calibration/{zone_key}")
 def get_calibration(zone_key: str, current_user=Depends(get_current_user)):
-    """Returns the currently saved polygon calibration for a zone, if any."""
+    """
+    Returns the currently saved polygon calibration for a zone, if any
+    """
     if zone_key not in SLOT_LAYOUTS:
         raise HTTPException(status_code=404, detail=f"Unknown zone '{zone_key}'")
     slots = _load_calibration(zone_key) or []
@@ -617,32 +577,25 @@ def get_calibration(zone_key: str, current_user=Depends(get_current_user)):
 @router.post("/calibration/{zone_key}")
 def save_calibration(zone_key: str, payload: dict, current_user=Depends(get_current_user)):
     """
-    Saves the fixed slot polygons drawn by an admin. Body: {"slots": [...],
-    "reference_image": "<base64 jpeg, no data: prefix>"}. The reference image
-    is what the camera view looked like at calibration time - it's stored so
-    the live feed can later be compared against it and the overlay only
-    shown once the camera is actually pointed at the same parking area
-    (see `_estimate_alignment` / usage in the WS loop below).
+    Stores parking slot polygon coordinates and reference photos in Base64 format
     """
     if getattr(current_user, "role", None) != "Admin":
         raise HTTPException(status_code=403, detail="Only Admins can save slot calibration")
+    
     if zone_key not in SLOT_LAYOUTS:
         raise HTTPException(status_code=404, detail=f"Unknown zone '{zone_key}'")
 
     slots = payload.get("slots")
     if not isinstance(slots, list) or not slots:
         raise HTTPException(status_code=400, detail="`slots` must be a non-empty list")
+    
     for s in slots:
         if not all(k in s for k in ("id", "category", "polygon")):
             raise HTTPException(status_code=400, detail="Each slot needs id, category, and polygon")
+        
         if not isinstance(s["polygon"], list) or len(s["polygon"]) < 3:
             raise HTTPException(status_code=400, detail=f"Slot '{s.get('id')}' polygon needs at least 3 points")
 
-    # A reference image is mandatory - without it the live WS loop has no way
-    # to verify the camera is actually pointed at the calibrated scene, and
-    # would otherwise never be able to show the calibrated overlay (aligned
-    # defaults to False when there's nothing to compare against). Rejecting
-    # here prevents saving a "blind" calibration that can never activate.
     ref_b64 = payload.get("reference_image")
     if not ref_b64:
         raise HTTPException(
@@ -669,10 +622,7 @@ def update_zone_capacity(
     current_user=Depends(get_current_user),
 ):
     """
-    Lets an Admin edit how many Employee/Vendor/Visitor slots a zone has.
-    Backs the "Set Capacity" button on the Parking Tracker page and writes
-    straight into the `parking_zone` table (total_capacity is kept in sync
-    as the sum of the three category capacities).
+    Partially update parking slot allocation capacities for each category within a zone
     """
     if getattr(current_user, "role", None) != "Admin":
         raise HTTPException(status_code=403, detail="Only Admins can change zone capacity")
@@ -683,8 +633,10 @@ def update_zone_capacity(
 
     if payload.employee_capacity is not None:
         zone.employee_capacity = payload.employee_capacity
+
     if payload.vendor_capacity is not None:
         zone.vendor_capacity = payload.vendor_capacity
+
     if payload.visitor_capacity is not None:
         zone.visitor_capacity = payload.visitor_capacity
 
@@ -708,7 +660,7 @@ def update_parking_slots(
     db: Session = Depends(get_db)
 ):
     """
-    Receives status updates for each parking slot from the AI ​​camera system (YOLO)
+    Receives status updates for each parking slot from the AI camera system
     """
     zone = db.query(ParkingZone).filter(ParkingZone.zone_key == payload.zone).first()
     if not zone:
@@ -823,64 +775,13 @@ def get_logs(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieving historical vehicle entry and exit log data (Entry/Exit Log)
+    Retrieving historical vehicle entry and exit log data
     """
     q = db.query(EntryExitLog)
     if zone:
         pz = db.query(ParkingZone).filter(ParkingZone.zone_key == zone).first()
         if pz:
             q = q.filter(EntryExitLog.zone_id == pz.zone_id)
+            
     logs = q.order_by(EntryExitLog.event_timestamp.desc()).limit(limit).all()
     return [log.to_log_dict() for log in logs]
-
-
-#
-def push_slot_update(
-    zone: str,
-    slot_status: Dict[str, str],
-    category_summary: Dict[str, dict],
-    parking_map: dict,
-) -> bool:
-    """
-    Helper function for transmitting full slot status update data from the edge device or local camera script to the main backend server
-    """
-    id_to_cat = {s["id"]: s.get("category", "Employee") for s in parking_map["slots"]}
-    payload = ZoneUpdate(
-        zone=zone,
-        timestamp=datetime.now().isoformat(),
-        slots=[
-            SlotItem(id=sid, status=st, category=id_to_cat.get(sid, "Employee"))
-            for sid, st in slot_status.items()
-        ],
-        category_summary={
-            cat: CategoryInfo(**data) for cat, data in category_summary.items()
-        },
-    )
-    try:
-        r = requests.post(settings.SLOTS_UPDATE_URL, json=payload.model_dump(), timeout=settings.API_TIMEOUT)
-        return r.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
-
-
-#
-def push_detection_event(zone: str, plate: str, confidence: float, status: str = "Occupied") -> bool:
-    """
-    Helper function for transmitting vehicle license plate reading events (LPR/OCR) to the backend API server
-    """
-    payload = DetectionEvent(
-        zone=zone,
-        timestamp=datetime.now().isoformat(),
-        plate=plate,
-        confidence=confidence,
-        status=status,
-    )
-    try:
-        r = requests.post(
-            f"{settings.BACKEND_URL}/api/slots/detection",
-            json=payload.model_dump(),
-            timeout=settings.API_TIMEOUT,
-        )
-        return r.status_code == 200
-    except requests.exceptions.RequestException:
-        return False

@@ -7,7 +7,6 @@ from app.core.config import settings
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-
 def setup_logging() -> None:
     """
     Configure application-wide logging
@@ -48,4 +47,3 @@ def setup_logging() -> None:
     # Quiet down noisy third-party loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
-    

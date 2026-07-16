@@ -1,6 +1,0 @@
-2026-07-15 11:53:29 - app.features.ocr.api.endpoints - ERROR - [OCR WS] Source 1 unavailable. Connection closed.
-2026-07-16 07:30:43 - app.features.occupancy.api.endpoints - ERROR - [SLOT WS] Too many consecutive failed reads. Disconnecting.
-2026-07-16 07:43:23 - app.features.occupancy.api.endpoints - ERROR - [SLOT WS] Too many consecutive failed reads. Disconnecting.
-2026-07-16 07:43:23 - app.features.occupancy.api.endpoints - ERROR - [SLOT WS] Too many consecutive failed reads. Disconnecting.
-2026-07-16 07:43:40 - app.features.occupancy.api.endpoints - ERROR - [SLOT WS] Too many consecutive failed reads. Disconnecting.
-2026-07-16 09:41:22 - app.features.occupancy.api.endpoints - ERROR - [SLOT WS] Too many consecutive failed reads. Disconnecting.

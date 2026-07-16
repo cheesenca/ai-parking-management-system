@@ -1,9 +1,3 @@
-"""
-AIPS Model — Camera Test
-Run this to confirm your webcam/camera is accessible before building the pipeline.
-Press Q to quit.
-"""
-
 import cv2
 import sys
 

@@ -11,7 +11,6 @@ from app.core.database import get_db
 from app.core.models import Member, Vehicle
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(
     tags=["Members"],
 )

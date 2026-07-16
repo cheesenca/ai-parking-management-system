@@ -1,12 +1,3 @@
-"""
-AIPS Model — Main Inference Pipeline
-Combines YOLOv8 tracking + EasyOCR + direction detection into one
-callable function that the FastAPI server uses.
-
-Run standalone for testing:
-    python pipeline/pipeline.py
-"""
-
 from __future__ import annotations
 
 import cv2
@@ -20,14 +11,14 @@ from pathlib import Path
 from plate_utils import preprocess_plate, clean_plate_text, average_plate_readings
 from direction_detector import DirectionDetector
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# Paths
 MODEL_DIR = Path(__file__).parent.parent / "models"
 DETECTOR_PATH = MODEL_DIR / "parkwise_detector.pt"
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# Constants 
 CONF_THRESHOLD  = 0.70   # minimum OCR confidence for auto-grant
 YOLO_CONF       = 0.50   # minimum YOLO detection confidence
-TRIPWIRE_Y      = 320    # ← SET THIS per your camera. Run test_camera.py first.
+TRIPWIRE_Y      = 320    # set this per your camera. Run test_camera.py first
 VEHICLE_CLASSES = ('car', 'motorcycle', 'truck', 'bus')
 
 
@@ -94,12 +85,12 @@ class AIPSPipeline:
 
         h, w = frame.shape[:2]
 
-        # ── Draw tripwire ──────────────────────────────────────────────────────
+        # Draw tripwire 
         cv2.line(annotated, (0, TRIPWIRE_Y), (w, TRIPWIRE_Y), (0, 255, 255), 2)
         cv2.putText(annotated, "GATE LINE", (10, TRIPWIRE_Y - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
-        # ── Run YOLO with tracking ─────────────────────────────────────────────
+        # Run YOLO with tracking
         results = self.detector.track(frame, persist=True, conf=YOLO_CONF,
                                       verbose=False)[0]
 
@@ -119,7 +110,7 @@ class AIPSPipeline:
 
             active_ids.add(track_id)
 
-            # ── Vehicle tracks ────────────────────────────────────────────────
+            # Vehicle tracks 
             if label in VEHICLE_CLASSES:
                 # Check direction crossing
                 direction = self.direction_detector.update(track_id, cx, cy)
@@ -168,7 +159,7 @@ class AIPSPipeline:
                     'det_conf':     round(det_conf, 2),
                 })
 
-                # ── Annotate frame ────────────────────────────────────────────
+                # Annotate frame 
                 color = (0, 255, 0) if direction == 'entry' else \
                         (0, 0, 255) if direction == 'exit'  else (255, 165, 0)
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
@@ -188,7 +179,7 @@ class AIPSPipeline:
                              (int(trail[i][0]),   int(trail[i][1])),
                              (200, 200, 200), 1)
 
-            # ── Plate box (if model has plate class) ──────────────────────────
+            # Plate box (if model has plate class) 
             elif label == 'license_plate':
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 255, 0), 2)
 
@@ -241,7 +232,7 @@ class AIPSPipeline:
         return (plate_text, confidence) if plate_text else None
 
 
-# ── Standalone test ────────────────────────────────────────────────────────────
+# Standalone test 
 if __name__ == '__main__':
     import sys
 

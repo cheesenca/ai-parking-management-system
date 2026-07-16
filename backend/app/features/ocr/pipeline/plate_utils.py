@@ -1,8 +1,3 @@
-"""
-AIPS Model — Plate Preprocessing Utilities
-Improves OCR accuracy by cleaning up the cropped plate image.
-"""
-
 from __future__ import annotations
 
 import cv2

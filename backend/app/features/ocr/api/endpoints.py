@@ -1,49 +1,42 @@
-"""
-AIPS Model — FastAPI Backend
-Serves the AI pipeline via REST + WebSocket to the ParkWise dashboard.
-"""
-
 import asyncio
 import base64
 import sys
-from pathlib import Path
-
 import cv2
-import numpy as np
+from pathlib import Path
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 # Add pipeline directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
 
-# ── App setup ─────────────────────────────────────────────────────────────────
+# App setup 
 router = APIRouter()
-ws_router = APIRouter() # ADDED: Separate router for WebSockets
+ws_router = APIRouter() 
 
-# ── Lazy-load pipeline (only once, on first connection) ───────────────────────
+# Lazy-load pipeline (only once, on first connection)
 _pipeline: AIPSPipeline | None = None
 
 def get_pipeline() -> AIPSPipeline:
     global _pipeline
     if _pipeline is None:
-        _pipeline = AIPSPipeline(use_pretrained=True)
+        _pipeline = AIPSPipeline(use_pretrained=False)
     return _pipeline
 
 
-# ── Health check (HTTP) ───────────────────────────────────────────────────────
+# Health check 
 @router.get("/api/health")
 def health():
     return {"status": "ok", "model": "loaded" if _pipeline else "not_loaded"}
 
 
-# ── Manual trigger endpoint (HTTP) ───────────────────────────────────────────
+# Manual trigger endpoint (HTTP) 
 @router.post("/api/scan/simulate")
 def simulate_scan():
     """
-    Simulates a detection event. Useful for testing the dashboard
-    integration before your camera/model is ready.
+    Simulates a detection event. Useful for testing the dashboard integration before your camera/model is ready.
     """
     import random, string
+
     fake_plate = (
         random.choice(['B','D','F','E']) + ' ' +
         str(random.randint(1000, 9999)) + ' ' +
@@ -51,24 +44,30 @@ def simulate_scan():
     )
     return {
         "plate_detected": fake_plate,
-        "confidence":     round(random.uniform(0.72, 0.99), 2),
-        "vehicle_type":   random.choice(['car', 'motorcycle']),
-        "event_type":     random.choice(['entry', 'exit']),
-        "timestamp":      __import__('datetime').datetime.now().isoformat(),
-        "status":         "detected",
+        "confidence": round(random.uniform(0.72, 0.99), 2),
+        "vehicle_type": random.choice(['car', 'motorcycle']),
+        "event_type": random.choice(['entry', 'exit']),
+        "timestamp": __import__('datetime').datetime.now().isoformat(),
+        "status": "detected",
     }
 
 
-# ── WebSocket endpoint (WebSocket) ────────────────────────────────────────────
-@ws_router.websocket("/ws/camera")  # CHANGED: Now uses ws_router
+# WebSocket endpoint (WebSocket)
+@ws_router.websocket("/ws/camera")
 async def camera_feed(
     websocket: WebSocket,
     camera_index: int = Query(default=0),
-    gate_type: str    = Query(default="entry"),   # override from dashboard
+    gate_type: str = Query(default="entry"),   
 ):
     """
     Connect from the ParkWise dashboard Parking Tracer page.
     Streams detection results in real time.
+
+    Query params:
+        camera_index : which camera to use (default 0 = first webcam)
+        gate_type    : 'entry' or 'exit' — overrides direction detection
+                       if set to a fixed value (optional, leave blank to
+                       use automatic direction detection)
     """
     await websocket.accept()
     print(f"[WS] Client connected | camera={camera_index}")
@@ -106,11 +105,11 @@ async def camera_feed(
                 ev = output['events'][0]   # take first event per frame
                 payload["detection"] = {
                     "plate_detected": ev['plate'],
-                    "confidence":     ev['confidence'],
-                    "vehicle_type":   ev['vehicle_type'],
-                    "event_type":     ev['event_type'],
-                    "timestamp":      ev['timestamp'],
-                    "status":         ev['status'],
+                    "confidence": ev['confidence'],
+                    "vehicle_type": ev['vehicle_type'],
+                    "event_type": ev['event_type'],
+                    "timestamp": ev['timestamp'],
+                    "status": ev['status'],
                 }
 
             await websocket.send_json(payload)

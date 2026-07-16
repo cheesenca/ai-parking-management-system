@@ -15,7 +15,6 @@ from app.core.database import get_db
 from app.core.models import AdminUser
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "e8d6d16d4bcaed978853d2f4b6f5efb7b6bc58bcfcde3f9352f8f5f3ca38a51e")

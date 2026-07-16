@@ -1,8 +1,3 @@
-"""
-AIPS Model — Direction Detector (Line Crossing)
-Determines ENTRY or EXIT based on which way a vehicle crosses
-the virtual tripwire line at the gate.
-"""
 
 from __future__ import annotations
 
