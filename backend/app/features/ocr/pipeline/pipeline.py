@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import cv2
 import numpy as np
 import easyocr
+import torch
 from ultralytics import YOLO
 from datetime import datetime
 from collections import defaultdict
@@ -12,7 +14,12 @@ from plate_utils import preprocess_plate, clean_plate_text, average_plate_readin
 from direction_detector import DirectionDetector
 
 # Paths
-MODEL_DIR = Path(__file__).resolve().parents[3] / "models"
+# pipeline.py lives at backend/app/features/ocr/pipeline/pipeline.py
+# parents[0]=pipeline, [1]=ocr, [2]=features, [3]=app, [4]=backend
+# MODEL_DIR must be parents[4] (backend/models). parents[3] resolves to
+# backend/app/models, which does not exist -- that's why the trained
+# detector (parkwise_detector.pt) failed to load.
+MODEL_DIR = Path(__file__).resolve().parents[4] / "models"
 DETECTOR_PATH = MODEL_DIR / "parkwise_detector.pt"
 
 # Constants 
@@ -45,9 +52,22 @@ class AIPSPipeline:
             self.detector = YOLO(str(DETECTOR_PATH))
             self.has_plate_class = 'license_plate' in self.detector.names.values()
 
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Only ask EasyOCR for the GPU if CUDA is actually available and
+        # YOLO_DEVICE hasn't been set to force CPU -- forcing gpu=True on a
+        # CPU-only deploy (e.g. no GPU passthrough in docker-compose) still
+        # works since EasyOCR falls back silently, but it's misleading and
+        # ignores the YOLO_DEVICE knob every other model in this app respects.
+        use_gpu = torch.cuda.is_available() and os.getenv("YOLO_DEVICE", "cuda").lower() != "cpu"
+
         # Load EasyOCR (downloads language models on first run ~500MB)
-        print("[AIPS]   EasyOCR — loading (first run downloads language models)...")
-        self.ocr = easyocr.Reader(['en', 'id'], gpu=False)
+        print(f"[AIPS]   EasyOCR — loading on {'GPU' if use_gpu else 'CPU'} "
+              "(first run downloads language models)...")
+        self.ocr = easyocr.Reader(
+            ['en', 'id'], gpu=use_gpu, download_enabled=True,
+            model_storage_directory=str(MODEL_DIR),
+        )
         print("[AIPS]   EasyOCR ready")
 
         # Direction detector

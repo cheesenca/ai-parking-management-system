@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 import sys
 import cv2
 from datetime import datetime
@@ -13,18 +14,33 @@ from pipeline import AIPSPipeline
 from app.core.database import SessionLocal
 from app.core.models import EntryExitLog, ParkingZone
 
-# App setup 
+logger = logging.getLogger(__name__)
+
+# App setup
 router = APIRouter()
-ws_router = APIRouter() 
+ws_router = APIRouter()
 
 # Lazy-load pipeline (only once, on first connection)
 _pipeline: AIPSPipeline | None = None
+# Set once AIPSPipeline() raises, so a persistently broken load (missing
+# model file, no network for EasyOCR's first-run download, etc.) fails
+# fast instead of being retried on every new /ws/camera connection.
+# Cleared by a process restart.
+_pipeline_load_failed = False
 
-def get_pipeline() -> AIPSPipeline:
-    global _pipeline
-    if _pipeline is None:
+def get_pipeline() -> AIPSPipeline | None:
+    global _pipeline, _pipeline_load_failed
+    if _pipeline is not None:
+        return _pipeline
+    if _pipeline_load_failed:
+        return None
+    try:
         _pipeline = AIPSPipeline(use_pretrained=False)
-    return _pipeline
+        return _pipeline
+    except Exception:
+        _pipeline_load_failed = True
+        logger.exception("[OCR WS] Pipeline failed to load")
+        return None
 
 
 def save_detection_event(event: dict, zone_key: str) -> None:
@@ -67,13 +83,13 @@ def save_detection_event(event: dict, zone_key: str) -> None:
 
 
 # Health check 
-@router.get("/api/health")
+@router.get("/health")
 def health():
     return {"status": "ok", "model": "loaded" if _pipeline else "not_loaded"}
 
 
 # Manual trigger endpoint (HTTP) 
-@router.post("/api/scan/simulate")
+@router.post("/scan/simulate")
 def simulate_scan():
     """
     Simulates a detection event. Useful for testing the dashboard integration before your camera/model is ready.
@@ -120,6 +136,11 @@ async def camera_feed(
     print(f"[WS] Client connected | camera={camera_index}")
 
     pipeline = get_pipeline()
+    if pipeline is None:
+        await websocket.send_json({"error": "Model pipeline failed to load."})
+        await websocket.close()
+        return
+
     cap = cv2.VideoCapture(camera_index)
 
     if not cap.isOpened():
