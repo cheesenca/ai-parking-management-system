@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
 import { useLiveDetection, useSlotOccupancy, useSlotDetection, CAMERA_INDEX_BY_ZONE } from '@/lib/api';
-import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
+import { Wifi, WifiOff, Cpu, Settings, AlertTriangle } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
 import SlotDetectionCamera from '@/components/SlotDetectionCamera';
@@ -37,7 +37,7 @@ export default function TrackerPage() {
   }, [lpr.latest]);
 
   return (
-    <div style={{ padding: '28px 32px' }} className="fadein">
+    <div className="page-pad fadein">
       {/* HEADER UTAMA */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
         <div>
@@ -47,11 +47,23 @@ export default function TrackerPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ConnPill label="LPR CAMERA" state={lpr.conn} icon={lpr.conn === 'live' ? Wifi : WifiOff} />
           <ConnPill label="SLOT SCANNER" state={slots.conn} icon={Cpu} />
+          {slots.isAnomaly && (
+            <span
+              title={`${slots.ghostVehicles} occupied slot(s) with no matching validated entry`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8,
+                background: 'var(--warn-bg)', border: '1px solid #FDE68A', color: 'var(--warn-text)',
+                fontSize: 11, fontWeight: 700,
+              }}
+            >
+              <AlertTriangle size={13} /> {slots.ghostVehicles} UNVERIFIED
+            </span>
+          )}
         </div>
       </div>
 
       {/* 1. GRID KIRI & KANAN (Sejajar sampai Live Slot Map) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      <div className="grid-2" style={{ marginBottom: 20 }}>
         
         {/* KOLOM KIRI: Live Detection (YOLOv8 + EasyOCR) */}
         <div>
@@ -94,7 +106,7 @@ export default function TrackerPage() {
         
         {/* Kartu Status & Set Capacity (Diperluas) */}
         <div className="card" style={{ padding: 24 }}> {/* Padding diperbesar */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="grid-2" style={{ gap: 16 }}>
             <div style={{ padding: 18, borderRadius: 12, background: 'var(--green-bg)', border: '1px solid #6EE7B7' }}>
               <div className="label" style={{ color: 'var(--green-text)', marginBottom: 8, fontSize: 12 }}>Latest In</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--green-text)' }}>{latestIn}</div>

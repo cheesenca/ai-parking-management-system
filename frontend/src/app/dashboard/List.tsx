@@ -70,7 +70,7 @@ export default function ParkingListPage() {
   const denied = useMemo(() => logs.filter(l => l.event_type === 'Denied'), [logs]);
 
   return (
-    <div style={{ padding: '28px 32px' }} className="fadein">
+    <div className="page-pad fadein">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Parking List</h1>
@@ -88,7 +88,7 @@ export default function ParkingListPage() {
       )}
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 22 }}>
+      <div className="grid-3" style={{ gap: 14, marginBottom: 22 }}>
         {[
           { label: 'Total Entry', value: ins.length, color: 'var(--green-text)', bg: 'var(--green-bg)', border: '#6EE7B7' },
           { label: 'Total Exit', value: outs.length, color: 'var(--danger-text)', bg: 'var(--danger-bg)', border: 'var(--red-mid)' },

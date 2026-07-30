@@ -20,3 +20,7 @@ python-multipart
 pillow
 python-dotenv
 websockets
+pandas
+statsmodels
+apscheduler
+openpyxl

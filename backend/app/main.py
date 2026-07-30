@@ -1,18 +1,21 @@
 import os
 import logging
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
- 
+
 from app.core import create_tables, check_connection, settings, setup_logging
 from app.features.auth.api import router as auth_router
 from app.features.members.api import router as members_router
 from app.features.forecast.api.endpoints import router as forecast_router
+from app.features.forecast.services.retrain import run_scheduled_retrain
 from app.features.ocr.api.endpoints import router as ocr_router, ws_router as ocr_ws_router
 from app.features.occupancy.api.endpoints import router as slots_router, ws_router as slots_ws_router
 
 setup_logging()
 logger = logging.getLogger(__name__)
+scheduler = BackgroundScheduler()
 
 
 @asynccontextmanager
@@ -24,9 +27,14 @@ async def lifespan(app: FastAPI):
         logger.warning("Database connection check failed at startup")
     create_tables()
     logger.info("Database initialized")
- 
+
+    scheduler.add_job(run_scheduled_retrain, "cron", hour=2, minute=0, id="nightly_retrain", replace_existing=True)
+    scheduler.start()
+    logger.info("Retrain scheduler started (daily @ 02:00)")
+
     yield
- 
+
+    scheduler.shutdown(wait=False)
     logger.info("Application shutting down...")
  
  

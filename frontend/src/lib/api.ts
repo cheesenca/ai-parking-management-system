@@ -240,6 +240,8 @@ export function useSlotOccupancy(zone: Zone) {
   const [slotStatus, setSlotStatus] = useState<Record<string, SlotStatus>>({});
   const [summary, setSummary] = useState<Record<string, CategoryInfo>>({});
   const [updatedAt, setUpdatedAt] = useState('');
+  const [ghostVehicles, setGhostVehicles] = useState(0);
+  const [isAnomaly, setIsAnomaly] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +263,8 @@ export function useSlotOccupancy(zone: Zone) {
         setSlotStatus(next);
         setSummary(data.category_summary as unknown as Record<string, CategoryInfo>);
         setUpdatedAt(data.timestamp);
+        setGhostVehicles(data.ghost_vehicles);
+        setIsAnomaly(data.anomaly);
         setConn('live');
       } catch {
         if (!cancelled) setConn('disconnected');
@@ -280,5 +284,5 @@ export function useSlotOccupancy(zone: Zone) {
   const total = map.slots.length;
   const occupied = Object.values(slotStatus).filter(s => s === 'Occupied').length;
 
-  return { conn, map, slotStatus, summary, updatedAt, total, occupied, available: total - occupied };
+  return { conn, map, slotStatus, summary, updatedAt, total, occupied, available: total - occupied, ghostVehicles, isAnomaly };
 }

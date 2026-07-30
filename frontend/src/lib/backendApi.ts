@@ -32,7 +32,19 @@ async function apiFetch<T>(
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`);
+    const detail = (err as { detail?: unknown }).detail;
+    let message: string;
+    if (typeof detail === 'string' && detail) {
+      message = detail;
+    } else if (Array.isArray(detail)) {
+      // FastAPI validation errors: a list of {loc, msg, type} objects
+      message = detail.map(d => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join('; ');
+    } else if (detail && typeof detail === 'object') {
+      message = JSON.stringify(detail);
+    } else {
+      message = `HTTP ${res.status}`;
+    }
+    throw new Error(message);
   }
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;
@@ -92,12 +104,18 @@ export async function apiGetMembers(params?: {
   zone?: string;
   category?: string;
   search?: string;
-}): Promise<Member[]> {
+  sort?: 'asc' | 'desc';
+  page?: number;
+  page_size?: number;
+}): Promise<{ items: Member[]; total: number; page: number; page_size: number }> {
   const q = new URLSearchParams();
   if (params?.zone && params.zone !== 'All') q.set('zone', params.zone);
   if (params?.category && params.category !== 'All') q.set('category', params.category);
   if (params?.search) q.set('search', params.search);
-  return apiFetch<Member[]>(`/api/v1/members?${q}`);
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.page_size) q.set('page_size', String(params.page_size));
+  return apiFetch(`/api/v1/members?${q}`);
 }
 
 export async function apiCreateMember(data: Omit<Member, 'member_id' | 'position' | 'last_in' | 'last_out'>): Promise<Member> {
@@ -139,6 +157,9 @@ export async function apiGetLiveSlots(zone: string) {
     total_capacity: number;
     total_occupied: number;
     total_available: number;
+    valid_sessions: number;
+    ghost_vehicles: number;
+    anomaly: boolean;
   }>(`/api/v1/slots/live?zone=${zone}`);
 }
 
@@ -194,6 +215,24 @@ export async function apiUpdateZoneCapacity(
   return apiFetch(`/api/v1/slots/zones/${zoneKey}/capacity`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  });
+}
+
+export async function apiManualApprovePlate(payload: {
+  plate: string;
+  zone: string;
+  event_type: 'entry' | 'exit';
+  timestamp: string;
+  original_confidence?: number;
+}): Promise<{
+  recorded: boolean;
+  plate: string;
+  classification: 'Member' | 'Visitor';
+  member: Member | null;
+}> {
+  return apiFetch('/api/v1/ocr/manual-approve', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

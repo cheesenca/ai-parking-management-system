@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { apiIsOnline } from '@/lib/backendApi';
-import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car, Crosshair } from 'lucide-react';
+import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car, Crosshair, X } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard/tracker', label: 'Parking Tracer', icon: ScanLine, roles: ['Admin', 'Security'] },
@@ -15,7 +15,7 @@ const navItems = [
   { href: '/dashboard/calibration', label: 'Slot Calibration', icon: Crosshair, roles: ['Admin'] },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router   = useRouter();
   const { user, logout } = useAuth();
@@ -36,18 +36,23 @@ export default function Sidebar() {
   const allowed = navItems.filter(n => user && n.roles.includes(user.role));
 
   return (
-    <aside style={{
-      width: 224, minHeight: '100vh',
-      background: '#fff',
-      borderRight: '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column',
-      position: 'fixed', top: 0, left: 0, zIndex: 50,
-    }}>
+    <aside className={`app-sidebar${mobileOpen ? ' mobile-open' : ''}`}>
       {/* Header */}
       <div style={{
         background: 'linear-gradient(135deg, var(--red) 0%, var(--red-dark) 60%, var(--red-deep) 100%)',
-        padding: '20px 20px 18px',
+        padding: '20px 20px 18px', position: 'relative',
       }}>
+        <button
+          onClick={onClose}
+          className="app-sidebar-close"
+          style={{
+            position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,.15)',
+            border: '1px solid rgba(255,255,255,.3)', borderRadius: 8, color: '#fff',
+            width: 28, height: 28, alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}
+        >
+          <X size={15} />
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <div style={{
             width: 34, height: 34, borderRadius: 9,
@@ -81,7 +86,7 @@ export default function Sidebar() {
         {allowed.map(item => {
           const active = pathname === item.href;
           return (
-            <Link key={item.href} href={item.href} style={{
+            <Link key={item.href} href={item.href} onClick={onClose} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '9px 12px', borderRadius: 9, marginBottom: 2,
               fontSize: 13, fontWeight: active ? 700 : 500,

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { X, Settings, Loader2 } from 'lucide-react';
 import type { Zone, Category } from '@/lib/types';
 import { apiUpdateZoneCapacity } from '@/lib/backendApi';
+import ModalPortal from './ModalPortal';
 
 interface CategorySummary {
   used: number;
@@ -63,6 +64,7 @@ export default function SetCapacityModal({ zone, currentSummary, onClose }: Prop
   };
 
   return (
+    <ModalPortal>
     <div
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
@@ -145,5 +147,6 @@ export default function SetCapacityModal({ zone, currentSummary, onClose }: Prop
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

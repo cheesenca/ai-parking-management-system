@@ -5,14 +5,20 @@ import sys
 import cv2
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
+from sqlalchemy.orm import Session
 
 # Add pipeline directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
+from plate_utils import normalize_plate, is_valid_plate_format
 
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, get_db
 from app.core.models import EntryExitLog, ParkingZone
+from app.features.auth.api import get_current_user
+from app.features.ocr.schemas.detection import ManualApprovalRequest
+from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
+from app.features.ocr.services.session_tracking import record_entry, record_exit
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +62,14 @@ def save_detection_event(event: dict, zone_key: str) -> None:
             print(f"[OCR->DB] Unknown zone_key '{zone_key}', skipping log write")
             return
 
+        plate_norm = normalize_plate(event.get("plate", ""))
+        vehicle = find_vehicle_by_plate(db, plate_norm)
+        if vehicle is None and not is_valid_plate_format(plate_norm):
+            print(f"[OCR->DB] Rejected unregistered, non-standard plate '{plate_norm}' — not recorded")
+            return
+        if vehicle is None:
+            vehicle = resolve_or_create_vehicle(db, plate_norm, event.get("vehicle_type", "Car"))
+
         event_type_map = {"entry": "Entry", "exit": "Exit"}
         db_event_type = event_type_map.get(event.get("event_type"), "Denied")
 
@@ -68,12 +82,18 @@ def save_detection_event(event: dict, zone_key: str) -> None:
         log = EntryExitLog(
             zone_id=zone.zone_id,
             event_type=db_event_type,
-            plate_detected=event.get("plate", "")[:20],
+            plate_detected=plate_norm[:20],
             confidence_score=event.get("confidence"),
             event_timestamp=event_ts,
             auth_method="AI_LPR",
         )
         db.add(log)
+
+        if db_event_type == "Entry":
+            record_entry(db, vehicle.vehicle_id, zone.zone_id, event_ts)
+        elif db_event_type == "Exit":
+            record_exit(db, vehicle.vehicle_id, event_ts)
+
         db.commit()
     except Exception as e:
         db.rollback()
@@ -82,7 +102,25 @@ def save_detection_event(event: dict, zone_key: str) -> None:
         db.close()
 
 
-# Health check 
+def _lookup_member_for_display(plate: str) -> dict | None:
+    """
+    Short-lived-session lookup used to enrich the live WS payload with the
+    matched member (if any), independent of whether the event ends up
+    persisted to entry_exit_log.
+    """
+    if not plate:
+        return None
+    db = SessionLocal()
+    try:
+        vehicle = find_vehicle_by_plate(db, plate)
+        if vehicle and vehicle.user_category == "Member" and vehicle.member:
+            return vehicle.member.to_member_dict()
+        return None
+    finally:
+        db.close()
+
+
+# Health check
 @router.get("/health")
 def health():
     return {"status": "ok", "model": "loaded" if _pipeline else "not_loaded"}
@@ -108,6 +146,62 @@ def simulate_scan():
         "event_type": random.choice(['entry', 'exit']),
         "timestamp": __import__('datetime').datetime.now().isoformat(),
         "status": "detected",
+    }
+
+
+# POST /api/v1/ocr/manual-approve
+@router.post("/manual-approve")
+def manual_approve_detection(
+    payload: ManualApprovalRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Staff-approved (or corrected) low-confidence plate read. Skips the
+    automated path's format safeguard — a human is vouching for this read —
+    but still cross-checks it against registered vehicles for classification.
+    """
+    zone = db.query(ParkingZone).filter(ParkingZone.zone_key == payload.zone).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail=f"Zone '{payload.zone}' not found")
+
+    plate_norm = normalize_plate(payload.plate)
+    if not plate_norm:
+        raise HTTPException(status_code=400, detail="Plate cannot be empty")
+
+    vehicle = resolve_or_create_vehicle(db, plate_norm)
+    member_dict = (
+        vehicle.member.to_member_dict()
+        if vehicle.user_category == "Member" and vehicle.member else None
+    )
+
+    try:
+        event_ts = datetime.fromisoformat(payload.timestamp) if payload.timestamp else datetime.now()
+    except ValueError:
+        event_ts = datetime.now()
+
+    db.add(EntryExitLog(
+        zone_id=zone.zone_id,
+        admin_id=current_user.admin_id,
+        event_type="Entry" if payload.event_type == "entry" else "Exit",
+        plate_detected=plate_norm[:20],
+        confidence_score=payload.original_confidence,
+        event_timestamp=event_ts,
+        auth_method="Manual_Security",
+    ))
+
+    if payload.event_type == "entry":
+        record_entry(db, vehicle.vehicle_id, zone.zone_id, event_ts)
+    else:
+        record_exit(db, vehicle.vehicle_id, event_ts)
+
+    db.commit()
+
+    return {
+        "recorded": True,
+        "plate": plate_norm,
+        "classification": "Member" if member_dict else "Visitor",
+        "member": member_dict,
     }
 
 
@@ -171,6 +265,7 @@ async def camera_feed(
             # If there are crossing events, enrich with full detection data
             if output['events']:
                 ev = output['events'][0]   # take first event per frame
+                member = _lookup_member_for_display(normalize_plate(ev['plate'])) if ev.get('plate') else None
                 payload["detection"] = {
                     "plate_detected": ev['plate'],
                     "confidence": ev['confidence'],
@@ -178,6 +273,7 @@ async def camera_feed(
                     "event_type": ev['event_type'],
                     "timestamp": ev['timestamp'],
                     "status": ev['status'],
+                    "member": member,
                 }
 
                 # Persist confirmed crossing events (skip low-confidence/no-plate noise)

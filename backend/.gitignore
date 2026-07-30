@@ -34,3 +34,10 @@ Thumbs.db
 
 # YOLO training outputs
 runs/
+
+# Local databases / generated artifacts
+*.db
+
+# Pretrained weights EasyOCR/Ultralytics auto-download on first run — not
+# custom-trained for this project, no need to version them (they're large).
+*.pth

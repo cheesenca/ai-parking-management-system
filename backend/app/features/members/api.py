@@ -68,17 +68,19 @@ def list_members(
     zone: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    sort: str = Query(default="asc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     """
-    Retrieve a list of members based on zone, category, or text search filters
+    Retrieve a paginated, sorted list of members based on zone, category, or text search filters
     """
     q = db.query(Member)
-    if zone: 
+    if zone:
         q = q.filter(Member.registered_plant == zone)
 
-    if category: 
+    if category:
         q = q.filter(Member.category == category)
 
     if search:
@@ -88,8 +90,16 @@ def list_members(
             Member.kpk_number.ilike(like) |
             Member.vehicles.any(Vehicle.plate_number.ilike(like))
         )
-    members = q.limit(limit).all()
-    return [m.to_member_dict() for m in members]
+
+    total = q.count()
+    order = Member.name.asc() if sort == "asc" else Member.name.desc()
+    members = q.order_by(order).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [m.to_member_dict() for m in members],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.post("", status_code=201)

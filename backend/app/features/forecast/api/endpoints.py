@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
+from app.features.auth.api import get_current_user
 from app.features.forecast.services.model import forecast_next_days
+from app.features.forecast.services.retrain import retrain_all_zones
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,22 @@ def get_arima_forecast(
     except FileNotFoundError as exc:
         logger.error("ARIMA forecast unavailable: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc))
+
+# POST /api/forecast/retrain
+@router.post("/retrain")
+def trigger_retrain(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Admin-triggered on-demand ARIMA retrain, bypassing the nightly schedule
+    """
+    if getattr(current_user, "role", None) != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admins can trigger a retrain")
+
+    results = retrain_all_zones(db)
+    return {"triggered_at": datetime.now().isoformat(), "results": results}
+
 
 # GET /api/forecast/zones
 @router.get("/zones")

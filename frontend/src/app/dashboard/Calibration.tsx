@@ -213,7 +213,7 @@ export default function CalibrationPage() {
   const remaining = defaultSlots.filter(s => !slots.some(x => x.id === s.id));
 
   return (
-    <div style={{ padding: '28px 32px' }} className="fadein">
+    <div className="page-pad fadein">
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>Slot Calibration</h1>
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -223,7 +223,7 @@ export default function CalibrationPage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+      <div className="grid-canvas">
         {/* Canvas */}
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>

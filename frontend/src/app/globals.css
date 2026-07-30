@@ -278,11 +278,32 @@ html, body {
   box-sizing: border-box; 
 }
 
-.kdash .dashboard { 
-  display: grid; 
-  grid-template-rows: auto auto auto 1fr auto; 
-  gap: 11px; 
-  padding: 14px; 
+.kdash .dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 14px;
+}
+.kdash .dashboard > .topbar,
+.kdash .dashboard > .risk-alert,
+.kdash .dashboard > .kpi-row,
+.kdash .dashboard > .footer { flex: 0 0 auto; }
+.kdash .dashboard > .main-content { flex: 1 1 auto; min-height: 0; }
+
+/* True one-page fit: only on screens wide enough that the stacked-column
+   layout below doesn't apply (see the 1200px breakpoint further down).
+   Content flexes to fill the viewport instead of pushing a page scrollbar;
+   the risk-alert being conditionally rendered no longer matters since flex
+   (unlike grid-template-rows) doesn't depend on a fixed child position/count. */
+@media (min-width: 1201px) {
+  .kdash .dashboard { height: calc(100vh - 56px); min-height: 0; }
+  .kdash .main-content { grid-template-rows: 1fr 1fr; min-height: 0; }
+  .kdash .upper-grid, .kdash .lower-grid { min-height: 0; }
+  .kdash .card { display: flex; flex-direction: column; min-height: 0; }
+  .kdash .card-header { flex: 0 0 auto; }
+  .kdash .chart-area, .kdash .preview-table-wrap, .kdash .insight-list, .kdash .donut-layout {
+    flex: 1 1 auto; min-height: 0; height: auto;
+  }
 }
 
 .kdash .topbar {
@@ -411,4 +432,107 @@ html, body {
   .kdash .kpi-row, .kdash .upper-grid, .kdash .lower-grid { grid-template-columns: 1fr; }
 }
 
+/* Two-card variant of upper-grid (this dashboard only shows 2 cards, not 3) */
+.kdash .upper-grid.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 1200px) {
+  .kdash .upper-grid.two { grid-template-columns: 1fr; }
+}
+
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── Shared responsive grid utilities ── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.grid-canvas { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .grid-4, .grid-canvas { grid-template-columns: 1fr; }
+}
+
+/* ── Login / auth shell ── */
+.login-shell { display: flex; gap: 0; width: 100%; max-width: 900px; border-radius: 20px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,.25); position: relative; }
+.login-brand { width: 360px; flex-shrink: 0; }
+@media (max-width: 760px) {
+  .login-shell { flex-direction: column; max-width: 460px; }
+  .login-brand { width: 100%; }
+}
+
+/* ── Page padding, tighter on small screens ── */
+.page-pad { padding: 28px 32px; }
+@media (max-width: 600px) {
+  .page-pad { padding: 16px; }
+}
+
+/* ── Responsive app shell (sidebar + main) ── */
+.app-sidebar {
+  width: 224px; min-height: 100vh; background: #fff; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; position: fixed; top: 0; left: 0; z-index: 50;
+  transition: transform .25s ease;
+}
+.app-main { margin-left: 224px; flex: 1; min-height: 100vh; overflow: auto; }
+.app-hamburger { display: none; }
+.app-sidebar-backdrop { display: none; }
+.app-sidebar-close { display: none; }
+
+@media (max-width: 900px) {
+  .app-sidebar { transform: translateX(-100%); }
+  .app-sidebar.mobile-open { transform: translateX(0); }
+  .app-main { margin-left: 0; }
+  .app-hamburger { display: inline-flex; }
+  .app-sidebar-close { display: inline-flex; }
+  .app-sidebar-backdrop.visible {
+    display: block; position: fixed; inset: 0; background: rgba(16,24,40,.45); z-index: 49;
+  }
+}
+
+@media print {
+  .app-sidebar, .app-hamburger, .app-sidebar-backdrop { display: none !important; }
+  .app-main { margin-left: 0 !important; }
+  .no-print { display: none !important; }
+  .kdash .dashboard { display: none !important; }
+  .kdash-guide-overlay { display: none !important; }
+  .report-only { display: block !important; }
+}
+
+/* ── Forecast PDF report (hidden in normal browsing, shown only on print) ── */
+.report-only { display: none; }
+.report-page { max-width: 900px; margin: 0 auto; padding: 24px; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--k-text); }
+.report-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 3px solid var(--mattel-red); padding-bottom: 14px; margin-bottom: 20px; }
+.report-brand { color: var(--mattel-red); font-size: 11px; font-weight: 800; letter-spacing: .06em; margin-bottom: 4px; }
+.report-header h1 { margin: 0 0 6px; font-size: 20px; font-weight: 850; color: var(--k-ink); }
+.report-header p { margin: 0; font-size: 12px; color: var(--k-muted); max-width: 460px; line-height: 1.5; }
+.report-meta { text-align: right; font-size: 11px; color: var(--k-muted); white-space: nowrap; }
+.report-meta div { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 3px; }
+.report-meta strong { color: var(--k-ink); }
+.report-page h2 { font-size: 14px; font-weight: 850; color: var(--k-ink); margin: 22px 0 10px; }
+.report-box { border: 1px solid var(--k-border); border-radius: 12px; padding: 14px 16px; }
+.report-box ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--k-text); line-height: 1.7; }
+.report-callout { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--mattel-red); background: var(--mattel-red-soft); color: var(--mattel-red-dark); font-size: 11.5px; font-weight: 650; border-radius: 0 8px 8px 0; }
+.report-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.report-metric-card { border: 1px solid var(--k-border); border-radius: 12px; padding: 12px 14px; }
+.report-metric-card span { display: block; font-size: 11px; font-weight: 700; color: var(--k-muted); margin-bottom: 4px; }
+.report-metric-card strong { display: block; font-size: 22px; font-weight: 850; color: var(--k-ink); }
+.report-metric-card em { display: block; font-size: 10.5px; font-style: normal; color: var(--k-muted); margin-top: 3px; }
+.report-perspectives { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.report-perspective-card { border: 1px solid var(--k-border); border-radius: 12px; padding: 14px; }
+.report-perspective-card h3 { margin: 0 0 10px; font-size: 12.5px; font-weight: 800; color: var(--k-muted); }
+.report-kv { display: flex; justify-content: space-between; font-size: 11.5px; padding: 4px 0; border-bottom: 1px solid var(--k-border); }
+.report-kv span { color: var(--k-muted); }
+.report-kv strong { color: var(--k-ink); }
+.report-action { margin: 10px 0 4px; font-size: 11.5px; font-weight: 700; color: var(--mattel-red-dark); }
+.report-caption { margin: 0; font-size: 10.5px; font-style: italic; color: var(--k-muted); }
+.report-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.report-table th { text-align: left; padding: 8px 10px; background: #FAFAFB; color: var(--k-ink); font-weight: 800; border-bottom: 1px solid var(--k-border); }
+.report-table td { padding: 8px 10px; border-bottom: 1px solid var(--k-border); vertical-align: top; }
+.report-note { font-size: 10.5px; color: var(--k-muted); font-style: italic; margin-top: 8px; }
+.report-footer { display: flex; justify-content: space-between; margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--k-border); font-size: 10.5px; color: var(--k-muted); }
+.report-priority-high { background: var(--full-bg); color: var(--full-text); }
+.report-priority-medium { background: var(--warning-bg); color: var(--warning-text); }
+.report-priority-low { background: var(--normal-bg); color: var(--normal-text); }
+
+@media print {
+  .report-page { max-width: none; padding: 0; }
+  .report-metrics, .report-perspectives { break-inside: avoid; }
+  .report-table { break-inside: auto; }
+  .report-perspective-card, .report-metric-card, .report-box { break-inside: avoid; }
+}

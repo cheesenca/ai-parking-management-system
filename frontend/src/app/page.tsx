@@ -48,10 +48,9 @@ export default function LoginPage() {
         }} />
       ))}
 
-      <div style={{ display: 'flex', gap: 0, width: '100%', maxWidth: 900, borderRadius: 20, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,.25)', position: 'relative' }}>
+      <div className="login-shell">
         {/* Left brand panel */}
-        <div style={{
-          width: 360, flexShrink: 0,
+        <div className="login-brand" style={{
           background: 'linear-gradient(160deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.05) 100%)',
           backdropFilter: 'blur(20px)',
           borderRight: '1px solid rgba(255,255,255,.15)',

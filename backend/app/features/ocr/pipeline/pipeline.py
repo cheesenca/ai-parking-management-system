@@ -41,6 +41,12 @@ class AIPSPipeline:
     def __init__(self, use_pretrained: bool = False):
         print("[AIPS] Loading models...")
 
+        # Single knob (YOLO_DEVICE env var) drives every model in this pipeline —
+        # the YOLO detector, EasyOCR, all of it — so forcing CPU for debugging
+        # doesn't require reinstalling anything.
+        use_gpu = torch.cuda.is_available() and os.getenv("YOLO_DEVICE", "cuda").lower() != "cpu"
+        self.device = "cuda" if use_gpu else "cpu"
+
         # Load YOLO model
         if use_pretrained or not DETECTOR_PATH.exists():
             print("[AIPS]   YOLOv8 — using base pretrained model (no custom training yet)")
@@ -51,15 +57,9 @@ class AIPSPipeline:
             print(f"[AIPS]   YOLOv8 — loading {DETECTOR_PATH}")
             self.detector = YOLO(str(DETECTOR_PATH))
             self.has_plate_class = 'license_plate' in self.detector.names.values()
+        self.detector.to(self.device)
 
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Only ask EasyOCR for the GPU if CUDA is actually available and
-        # YOLO_DEVICE hasn't been set to force CPU -- forcing gpu=True on a
-        # CPU-only deploy (e.g. no GPU passthrough in docker-compose) still
-        # works since EasyOCR falls back silently, but it's misleading and
-        # ignores the YOLO_DEVICE knob every other model in this app respects.
-        use_gpu = torch.cuda.is_available() and os.getenv("YOLO_DEVICE", "cuda").lower() != "cpu"
 
         # Load EasyOCR (downloads language models on first run ~500MB)
         print(f"[AIPS]   EasyOCR — loading on {'GPU' if use_gpu else 'CPU'} "
@@ -112,7 +112,7 @@ class AIPSPipeline:
 
         # Run YOLO with tracking
         results = self.detector.track(frame, persist=True, conf=YOLO_CONF,
-                                      verbose=False)[0]
+                                      device=self.device, verbose=False)[0]
 
         if results.boxes.id is None:
             return {'events': [], 'vehicles': [], 'frame': annotated}
