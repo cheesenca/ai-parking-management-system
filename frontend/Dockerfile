@@ -1,8 +1,8 @@
 FROM node:20-alpine
 WORKDIR /app
 
-# Copy package.json to install dependencies
-COPY package.json ./
+# Copy file dependencies to optimize docker layer caching
+COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 
 # Install project dependencies
 RUN npm install

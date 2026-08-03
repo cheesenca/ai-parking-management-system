@@ -18,7 +18,6 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
 
   const status: Status = useMemo(() => {
     if (lpr.conn !== 'live') return 'idle'; 
-
     if (!det) return 'idle';
     if (det.confidence < 0.7 || det.plate_detected === '???') return 'denied';
     if (det.member && det.member.registered_plant !== selectedZone &&

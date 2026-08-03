@@ -3,21 +3,16 @@ import type { Zone, Member } from '@/lib/types';
 import { apiGetLiveSlots, getToken } from '@/lib/backendApi';
 import { PARKING_MAPS, type SlotStatus, type CategoryInfo } from '@/lib/slotData';
 
-const LPR_HOST = process.env.NEXT_PUBLIC_LPR_HOST  || '';
+const LPR_HOST = process.env.NEXT_PUBLIC_LPR_HOST || '';
 const SLOT_HOST = process.env.NEXT_PUBLIC_SLOT_HOST || '';
 
 export type ConnState = 'live' | 'connecting' | 'disconnected' | 'simulated';
-
-// Physical camera routing per zone. Only ONE slot-scanner camera exists
-// today, so every zone points at device 0 - the backend enforces this same
-// mapping server-side (ZONE_CAMERA_DEVICE in endpoints.py) so this value is
-// really just for display/testing purposes. Once East Plant / East&West
-// Plant get their own cameras, update both this map and its backend twin.
 export const CAMERA_INDEX_BY_ZONE: Record<Zone, number> = {
-  west: 0,
-  east: 0,      // TODO: point to the East Plant camera device once installed
-  eastwest: 0,  // TODO: point to the East&West Plant camera device once installed
+  west: 1,
+  east: 1,
+  eastwest: 1,
 };
+
 export interface Detection {
   plate_detected: string;
   confidence: number;
@@ -42,6 +37,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
       setConn('disconnected');
       return;
     }
+
     if (!LPR_HOST) {
       setConn('disconnected');
       return;
@@ -69,7 +65,11 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
 
     const failTimer = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
-        try { ws.close(); } catch {}
+        try { 
+          ws.close(); 
+        } catch {
+          //
+        }
         if (!cancelled) setConn('disconnected');
       }
     }, 5000);
@@ -102,7 +102,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
           setScanCount(c => c + 1);
         }
       } catch { 
-
+        //
       }
     };
 
@@ -144,6 +144,7 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
       setConn('disconnected');
       return;
     }
+
     if (!SLOT_HOST) {
       setConn('disconnected');
       return;
@@ -200,9 +201,6 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
       clearTimeout(failTimer);
       if (!cancelled) {
         setConn('disconnected');
-        // Don't leave a stale last-good frame on screen once the connection
-        // drops - it can look like the (possibly calibrated) overlay is
-        // still live when it's actually just a frozen old frame.
         setFrame(null);
         setDetections(0);
         setCalibrationActive(false);
@@ -216,9 +214,6 @@ export function useSlotDetection(zone: Zone, opts: { cameraIndex?: number; enabl
         setFrame(null);
         setDetections(0);
         setCalibrationActive(false);
-        // Auto-retry - camera/model init can be slow or momentarily busy
-        // (e.g. briefly held by another process), so keep trying instead of
-        // requiring a manual page refresh.
         retryTimer = setTimeout(() => setRetryTick(t => t + 1), 4000);
       }
     };

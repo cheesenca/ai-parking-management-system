@@ -1,0 +1,4 @@
+2026-08-02 11:31:22 - app.features.occupancy.api.endpoints - ERROR - Too many consecutive failed reads, disconnecting.
+2026-08-02 11:34:23 - app.features.occupancy.api.endpoints - ERROR - Too many consecutive failed reads, disconnecting.
+2026-08-02 18:33:49 - app.features.occupancy.api.endpoints - ERROR - Too many consecutive failed reads, disconnecting.
+2026-08-03 10:22:44 - app.features.occupancy.api.endpoints - ERROR - Too many consecutive failed reads, disconnecting.

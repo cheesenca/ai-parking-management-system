@@ -132,7 +132,7 @@ export default function ParkingListPage() {
               </tr></thead>
               <tbody>
                 {paged.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>Tidak ada data.</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>No data available</td></tr>
                 ) : paged.map(l => (
                   <tr key={l.log_id}>
                     <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>{l.plate_detected}</span></td>

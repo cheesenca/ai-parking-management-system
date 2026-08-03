@@ -142,30 +142,39 @@ class ParkingZone(Base):
         """
         Aggregates all real-time data from the parking area and converts it into a Python dictionary format
         """
+        employee = {
+            "used": self.employee_used,
+            "total": self.employee_capacity,
+            "available": self.employee_available,
+            "rate_pct": round(self.employee_used / self.employee_capacity * 100, 1) if self.employee_capacity else 0.0,
+        }
+        vendor = {
+            "used": self.vendor_used,
+            "total": self.vendor_capacity,
+            "available": self.vendor_available,
+            "rate_pct": round(self.vendor_used / self.vendor_capacity * 100, 1) if self.vendor_capacity else 0.0,
+        }
+        visitor = {
+            "used": self.visitor_used,
+            "total": self.visitor_capacity,
+            "available": self.visitor_available,
+            "rate_pct": round(self.visitor_used / self.visitor_capacity * 100, 1) if self.visitor_capacity else 0.0,
+        }
         return {
             "zone": self.zone_key,
             "zone_name": self.zone_name,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            # Nested form kept for the /slots/live consumer (keyed by category name).
             "category_summary": {
-                "Employee": {
-                    "used": self.employee_used,
-                    "total": self.employee_capacity,
-                    "available": self.employee_available,
-                    "rate_pct": round(self.employee_used / self.employee_capacity * 100, 1) if self.employee_capacity else 0.0,
-                },
-                "Vendor": {
-                    "used": self.vendor_used,
-                    "total": self.vendor_capacity,
-                    "available": self.vendor_available,
-                    "rate_pct": round(self.vendor_used / self.vendor_capacity * 100, 1) if self.vendor_capacity else 0.0,
-                },
-                "Visitor": {
-                    "used": self.visitor_used,
-                    "total": self.visitor_capacity,
-                    "available": self.visitor_available,
-                    "rate_pct": round(self.visitor_used / self.visitor_capacity * 100, 1) if self.visitor_capacity else 0.0,
-                },
+                "Employee": employee,
+                "Vendor": vendor,
+                "Visitor": visitor,
             },
+            # Flat form for the /forecast/zones consumer (matches the frontend's
+            # ZoneCapacity type: { employee, vendor, visitor }).
+            "employee": {k: v for k, v in employee.items() if k != "rate_pct"},
+            "vendor": {k: v for k, v in vendor.items() if k != "rate_pct"},
+            "visitor": {k: v for k, v in visitor.items() if k != "rate_pct"},
             "total_capacity": self.total_capacity,
             "total_occupied": self.used_capacity,
             "total_available": self.total_capacity - self.used_capacity,
@@ -312,10 +321,26 @@ class OccupancySnapshot(Base):
 
 
 class AnalyticsData(Base):
+    """
+    Holds BOTH the original per-zone/per-day analytics rows (legacy
+    Analytics dashboard, `area_code` / `period_type` left at their
+    defaults) AND the Predictive Analytics forecast rows (daily / weekly
+    / monthly, one row per area code e.g. P1W..P3E).
+
+    Reusing this single table (instead of three extra `daily_forecast`,
+    `weekly_forecast`, `monthly_forecast` tables) keeps the schema at the
+    original 9 tables — only a handful of nullable columns were added.
+    See `app/features/forecast/models.py` for how forecast rows are
+    grouped back into daily/weekly/monthly "records" for the API.
+    """
     __tablename__ = "analytics_data"
     __table_args__ = (
-        UniqueConstraint("zone_id", "record_date", name="uq_analytics_zone_date"),
+        UniqueConstraint(
+            "zone_id", "record_date", "period_type", "area_code",
+            name="uq_analytics_zone_date_area",
+        ),
         Index("idx_analytics_date", "record_date"),
+        Index("idx_analytics_period_area", "period_type", "area_code"),
     )
 
     # Attributes
@@ -331,7 +356,21 @@ class AnalyticsData(Base):
     predicted_visitor = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
+    # --- Predictive Analytics (forecast) columns -------------------------
+    # 'daily' (default, matches legacy rows) | 'weekly' | 'monthly'
+    period_type = Column(String(10), nullable=False, default="daily", server_default="daily")
+    # Area code e.g. 'P1W'..'P3E'. NULL = legacy per-zone analytics row.
+    area_code = Column(String(10), nullable=True)
+    # Human-readable period key: weekly -> "2026-W23", monthly -> "2026-06".
+    # Left NULL for daily rows (record_date is already unambiguous).
+    period_label = Column(String(20), nullable=True)
+    # Predicted *available* slots for the area/period (forecast rows only).
+    predicted_available = Column(Integer, nullable=True)
+    # Forecast status: 'Normal' | 'Warning' | 'Full' (forecast rows only).
+    status = Column(String(10), nullable=True, default="Normal")
+
     # Relationships
     zone = relationship("ParkingZone", back_populates="analytics_data")
     def __repr__(self):
         return f"AnalyticsData zone={self.zone_id} date={self.record_date}"
+    

@@ -6,7 +6,11 @@ pymysql
 cryptography
 opencv-python
 numpy
+pandas
 joblib
+APScheduler
+statsmodels
+prophet
 requests
 ultralytics
 python-jose[cryptography]
@@ -20,7 +24,4 @@ python-multipart
 pillow
 python-dotenv
 websockets
-pandas
-statsmodels
-apscheduler
 openpyxl

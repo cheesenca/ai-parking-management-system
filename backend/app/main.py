@@ -1,21 +1,33 @@
 import os
 import logging
 from contextlib import asynccontextmanager
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from app.core import create_tables, check_connection, settings, setup_logging
-from app.features.auth.api import router as auth_router
-from app.features.members.api import router as members_router
+from app.features.auth.endpoints import router as auth_router
+from app.features.members.endpoints import router as members_router
 from app.features.forecast.api.endpoints import router as forecast_router
-from app.features.forecast.services.retrain import run_scheduled_retrain
+from app.features.forecast.services.retrain import run_scheduled_retrain, retrain_all_zones
 from app.features.ocr.api.endpoints import router as ocr_router, ws_router as ocr_ws_router
 from app.features.occupancy.api.endpoints import router as slots_router, ws_router as slots_ws_router
 
 setup_logging()
 logger = logging.getLogger(__name__)
-scheduler = BackgroundScheduler()
+scheduler = AsyncIOScheduler()
+
+
+def _run_prophet_retrain_job() -> None:
+    """
+    Run the Prophet retraining job and log the result
+    """
+    logger.info("Scheduled Prophet retrain starting...")
+    try:
+        results = retrain_all_zones()
+        logger.info("Scheduled Prophet retrain finished: %s", results)
+    except Exception:
+        logger.exception("Scheduled Prophet retrain failed")
 
 
 @asynccontextmanager
@@ -29,12 +41,29 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized")
 
     scheduler.add_job(run_scheduled_retrain, "cron", hour=2, minute=0, id="nightly_retrain", replace_existing=True)
+    logger.info("ARIMA retrain scheduled daily at 02:00")
+
+    if settings.PROPHET_RETRAIN_ENABLED:
+        scheduler.add_job(
+            _run_prophet_retrain_job,
+            trigger=CronTrigger(hour=settings.PROPHET_RETRAIN_HOUR, minute=settings.PROPHET_RETRAIN_MINUTE),
+            id="prophet_retrain",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info(
+            "Prophet retrain scheduled daily at %02d:%02d",
+            settings.PROPHET_RETRAIN_HOUR, settings.PROPHET_RETRAIN_MINUTE,
+        )
+    else:
+        logger.info("Prophet retrain scheduler disabled (PROPHET_RETRAIN_ENABLED=false)")
+
     scheduler.start()
-    logger.info("Retrain scheduler started (daily @ 02:00)")
 
     yield
 
-    scheduler.shutdown(wait=False)
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
     logger.info("Application shutting down...")
  
  
@@ -135,3 +164,4 @@ if __name__ == "__main__":
         reload=True,
         log_level=os.getenv("LOG_LEVEL", "info").lower(),
     )
+    

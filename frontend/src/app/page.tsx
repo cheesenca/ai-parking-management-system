@@ -23,15 +23,19 @@ export default function LoginPage() {
     const ok = await login(username, password);
     setLoading(false);
     if (ok) router.push('/dashboard/tracker');
-    else setError('Invalid username or password.');
+    else setError('Invalid username or password');
   };
 
   return (
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #E5002B 0%, #B80022 50%, #870019 100%)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24, position: 'relative', overflow: 'hidden',
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: 24, 
+      position: 'relative', 
+      overflow: 'hidden',
     }}>
       {/* Background circles */}
       {[
@@ -130,7 +134,7 @@ export default function LoginPage() {
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
                 <label className="label" style={{ display: 'block' }}>Password</label>
-                <Link href="/forgot-password" style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
+                <Link href="/auth/forgot-password" style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
                   Forgot password?
                 </Link>
               </div>
@@ -173,7 +177,7 @@ export default function LoginPage() {
 
           <div style={{ marginTop: 28, textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
             Don&apos;t have an account?{' '}
-            <Link href="/register" style={{ color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
+            <Link href="/auth/register" style={{ color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
               Sign up
             </Link>
           </div>

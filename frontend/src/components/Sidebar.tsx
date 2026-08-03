@@ -17,7 +17,7 @@ const navItems = [
 
 export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
   const { user, logout } = useAuth();
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
 
@@ -29,7 +29,11 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
     };
     check();
     const interval = setInterval(check, 10_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    
+    return () => { 
+      cancelled = true; 
+      clearInterval(interval); 
+    };
   }, []);
 
   const handleLogout = () => { logout(); router.push('/'); };

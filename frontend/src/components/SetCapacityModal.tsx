@@ -1,4 +1,5 @@
 'use client';
+
 import { useState } from 'react';
 import { X, Settings, Loader2 } from 'lucide-react';
 import type { Zone, Category } from '@/lib/types';
@@ -27,14 +28,15 @@ const CATEGORIES: { key: Category; field: 'employee_capacity' | 'vendor_capacity
 export default function SetCapacityModal({ zone, currentSummary, onClose }: Props) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
+
     CATEGORIES.forEach(c => {
       init[c.key] = String(currentSummary[c.key]?.total ?? 0);
     });
+
     return init;
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const totalPreview = CATEGORIES.reduce((sum, c) => sum + (Number(values[c.key]) || 0), 0);
 
   const handleSave = async () => {
@@ -46,6 +48,7 @@ export default function SetCapacityModal({ zone, currentSummary, onClose }: Prop
         return;
       }
     }
+
     setSaving(true);
     try {
       await apiUpdateZoneCapacity(zone, {
@@ -54,7 +57,6 @@ export default function SetCapacityModal({ zone, currentSummary, onClose }: Prop
         visitor_capacity: Number(values.Visitor),
       });
       onClose();
-      // Simplest way to reflect new capacity everywhere (CategoryStats, etc.)
       window.location.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update capacity');

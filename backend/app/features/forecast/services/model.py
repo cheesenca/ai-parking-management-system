@@ -1,50 +1,80 @@
-
 import logging
 import joblib
 from app.core.config import settings
  
 logger = logging.getLogger(__name__)
  
-_arima_model = None
- 
+_prophet_models: dict | None = None
+
+
+def reset_cache() -> None:
+    """
+    Reset the cached Prophet model
+    """
+    global _prophet_models
+    _prophet_models = None
+    logger.info("Prophet model cache cleared; next forecast call will reload from disk")
+
  
 def _load_model():
     """
-    Lazy-load the fitted ARIMA model once and cache it in memory
+    Lazy-load the fitted Prophet model once and cache it in memory
     """
-    global _arima_model
-    if _arima_model is not None:
-        return _arima_model
+    global _prophet_models
+    if _prophet_models is not None:
+        return _prophet_models
  
-    if not settings.ARIMA_MODEL_PATH.exists():
+    if not settings.PROPHET_MODEL_PATH.exists():
         raise FileNotFoundError(
-            f"ARIMA model not found at {settings.ARIMA_MODEL_PATH}. "
-            "Make sure arima.joblib is placed in the models/ directory."
+            f"Prophet model not found at {settings.PROPHET_MODEL_PATH}"
         )
+    logger.info(f"Loading Prophet model(s) from {settings.PROPHET_MODEL_PATH}")
+    try:
+        loaded = joblib.load(settings.PROPHET_MODEL_PATH)
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            f"Failed to load {settings.PROPHET_MODEL_PATH}: missing dependency '{exc.name}'"
+        ) from exc
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to load {settings.PROPHET_MODEL_PATH}: {exc}"
+        ) from exc
+
+    if not isinstance(loaded, dict):
+        logger.warning(
+            "Loaded Prophet model is not per-zone (legacy format)"
+        )
+        loaded = {"west": loaded, "east": loaded}
  
-    logger.info(f"Loading ARIMA model from {settings.ARIMA_MODEL_PATH}")
-    _arima_model = joblib.load(settings.ARIMA_MODEL_PATH)
-    return _arima_model
+    _prophet_models = loaded
+    return _prophet_models
  
  
 def forecast_next_days(periods: int = 30) -> list[dict]:
     """
-    Generate a forward forecast using the pre-trained ARIMA model.
-    Returns a list of {step, predicted_demand, lower, upper} dicts.
+    Forecast the next `periods` days of parking demand using the Prophet model
     """
-    model = _load_model()
+    models = _load_model()
  
-    # statsmodels ARIMAResultsWrapper: get_forecast gives mean + confidence interval
-    forecast_result = model.get_forecast(steps=periods)
-    mean = forecast_result.predicted_mean
-    conf_int = forecast_result.conf_int()
+    if zone is None:
+        zone = "west" if "west" in models else next(iter(models))
+    if zone not in models:
+        raise KeyError(
+            f"No Prophet model available for zone '{zone}'"
+            f"Available zones: {list(models.keys())}"
+        )
+ 
+    model = models[zone]
+    future = model.make_future_dataframe(periods=periods, freq="D", include_history=False)
+    forecast = model.predict(future)
  
     results = []
     for i in range(periods):
+        row = forecast.iloc[i]
         results.append({
             "step": i + 1,
-            "predicted_demand": round(float(mean.iloc[i]), 2),
-            "lower": round(float(conf_int.iloc[i, 0]), 2),
-            "upper": round(float(conf_int.iloc[i, 1]), 2),
+            "predicted_demand": round(float(row["yhat"]), 2),
+            "lower": round(float(row["yhat_lower"]), 2),
+            "upper": round(float(row["yhat_upper"]), 2),
         })
     return results

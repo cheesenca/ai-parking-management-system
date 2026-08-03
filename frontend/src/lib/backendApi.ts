@@ -1,4 +1,11 @@
-import type { AuthUser, Member, EntryLog, ZoneCapacity, ForecastDay, OccupancyPoint } from './types';
+import type { 
+  AuthUser, 
+  Member, 
+  EntryLog, 
+  ZoneCapacity, 
+  ForecastDay, 
+  OccupancyPoint, 
+} from './types';
 
 const BASE =
   typeof window !== 'undefined'
@@ -12,7 +19,11 @@ export function getToken(): string {
   if (typeof window === 'undefined') return '';
   return sessionStorage.getItem(TOKEN_KEY) || '';
 }
-export function setToken(token: string)  { sessionStorage.setItem(TOKEN_KEY, token); }
+
+export function setToken(token: string) { 
+  sessionStorage.setItem(TOKEN_KEY, token); 
+}
+
 export function clearSession() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
@@ -30,6 +41,7 @@ async function apiFetch<T>(
     ...(init.headers as Record<string, string> | undefined),
   };
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = (err as { detail?: unknown }).detail;
@@ -46,6 +58,7 @@ async function apiFetch<T>(
     }
     throw new Error(message);
   }
+
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;
 }
@@ -71,6 +84,7 @@ export async function apiLogin(
     { method: 'POST', body: JSON.stringify({ username, password }) },
     true,
   );
+
   setToken(data.access_token);
   return data.user;
 }
@@ -181,7 +195,7 @@ export async function apiGetCalibrationSnapshot(zoneKey: string): Promise<{
   zone: string;
   width: number;
   height: number;
-  image: string; // base64 jpeg, no data: prefix
+  image: string; 
   default_slots: { id: string; category: string }[];
 }> {
   return apiFetch(`/api/v1/slots/calibration/${zoneKey}/snapshot`);

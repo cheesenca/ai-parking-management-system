@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
@@ -95,7 +96,9 @@ export default function CalibrationPage() {
   useEffect(() => {
     setImage(null);
     setSource(null);
-    loadSnapshot();
+    setError(null);
+    setSaved(false);
+    setCurrentPoints([]);
     /* eslint-disable-next-line */
   }, [zone]);
 

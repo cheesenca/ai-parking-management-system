@@ -48,3 +48,4 @@ class DetectionEvent(BaseModel):
     plate: str
     confidence: float          
     status: str = "Occupied"  
+    

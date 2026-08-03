@@ -13,9 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
 from plate_utils import normalize_plate, is_valid_plate_format
 
-from app.core.database import SessionLocal, get_db
 from app.core.models import EntryExitLog, ParkingZone
-from app.features.auth.api import get_current_user
+from app.features.auth.endpoints import get_current_user
 from app.features.ocr.schemas.detection import ManualApprovalRequest
 from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
 from app.features.ocr.services.session_tracking import record_entry, record_exit

@@ -43,6 +43,9 @@ export default function DashboardPage({
     if (!View) router.replace('/dashboard/tracker');
   }, [View, router]);
 
+  const isTracker = view === 'tracker';
+  const OtherView = !isTracker ? View : null;
+
   if (loading) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
   if (!user || !View) return null;
 
@@ -62,7 +65,13 @@ export default function DashboardPage({
         >
           <Menu size={15} /> Menu
         </button>
-        <View />
+        {/* TrackerPage stays mounted at all times (just hidden) so its camera
+            WebSocket connections (LPR + Slot Occupancy) aren't torn down and
+            reconnected every time the user navigates away and back. */}
+        <div style={{ display: isTracker ? 'block' : 'none' }}>
+          <TrackerPage />
+        </div>
+        {OtherView && <OtherView />}
       </main>
     </div>
   );
