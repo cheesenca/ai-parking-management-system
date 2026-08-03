@@ -3,11 +3,13 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ScanLine, CheckCircle, XCircle, AlertTriangle, Camera } from 'lucide-react';
 import { type Zone } from '@/lib/types';
+import ManualApprovalModal from './ManualApprovalModal';
 
 type Status = 'idle' | 'scanning' | 'granted' | 'denied' | 'wrong_loc';
 
 export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selectedZone: Zone }) {
   const [verified, setVerified] = useState<number | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const det = lpr.latest;
 
   useEffect(() => {
@@ -16,13 +18,16 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
 
   const status: Status = useMemo(() => {
     if (lpr.conn !== 'live') return 'idle'; 
-
     if (!det) return 'idle';
     if (det.confidence < 0.7 || det.plate_detected === '???') return 'denied';
     if (det.member && det.member.registered_plant !== selectedZone &&
         det.member.registered_plant !== 'eastwest' && selectedZone !== 'eastwest') return 'wrong_loc';
     return 'granted';
   }, [det, selectedZone, lpr.conn]);
+
+  useEffect(() => {
+    setModalOpen(status === 'denied' && !!det);
+  }, [det, status]);
 
   const statusConfig: Record<Status, { label: string; color: string; bg: string; border: string; icon: typeof Camera }> = {
     idle: { label: 'Awaiting Vehicle', color: 'var(--muted)', bg: 'var(--bg)', border: 'var(--border)', icon: Camera },
@@ -101,22 +106,24 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
         ))}
       </div>
 
-      <div style={{ 
-        display: 'flex', 
-        gap: 10, 
-        marginTop: 16,
-        opacity: (status === 'denied' && det) ? 1 : 0.4, 
-        pointerEvents: (status === 'denied' && det) ? 'auto' : 'none',
-        transition: 'opacity 0.2s ease-in-out'
-      }}>
-        <button className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--teal)', border: 'none' }} onClick={() => setVerified(lpr.scanCount)}>
-          <CheckCircle size={14} /> Verify &amp; Admit
-        </button>
-        <button className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setVerified(null)}>
-          Reject
-        </button>
-      </div>
+      {status === 'denied' && det && !modalOpen && (
+        <div style={{ marginTop: 16, fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
+          Manual verification dismissed for this scan — waiting for the next vehicle.
+        </div>
+      )}
 
+      {modalOpen && det && (
+        <ManualApprovalModal
+          key={det.timestamp}
+          detection={det}
+          zone={selectedZone}
+          onClose={() => setModalOpen(false)}
+          onApproved={() => {
+            setVerified(lpr.scanCount);
+            setModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

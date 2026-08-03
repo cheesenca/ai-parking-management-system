@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /backend
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libgl1 \
     libsm6 \
@@ -29,6 +29,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy the rest of the application source code into the container
 COPY . .
+
+# Create non-root user for container security
+RUN useradd -m appuser && chown -R appuser:appuser /backend
+USER appuser
 
 # Expose the API port
 EXPOSE 8000

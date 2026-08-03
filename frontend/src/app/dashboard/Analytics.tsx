@@ -1,249 +1,434 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { RefreshCw, Download } from 'lucide-react';
-import { apiForecastZones, apiForecastDashboard, apiOccupancyHistory } from '@/lib/backendApi';
-import type { ZoneCapacity, ForecastDay, OccupancyPoint } from '@/lib/types';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AlertTriangle, HelpCircle, FileText, X, Flame, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { apiForecastZones, apiForecastDashboard } from '@/lib/backendApi';
+import type { ZoneCapacity, ForecastDay } from '@/lib/types';
+import ForecastReportPrint from '@/components/ForecastReportPrint';
+
+export type ZoneKey = 'west' | 'east' | 'eastwest';
+type Granularity = 'daily' | 'weekly' | 'monthly' | 'semester' | 'yearly';
+
+export const ZONE_KEYS: ZoneKey[] = ['west', 'east', 'eastwest'];
+export const ZONE_LABELS: Record<ZoneKey, string> = { west: 'West', east: 'East', eastwest: 'East & West' };
+
+export interface ZoneDay {
+  demand: number;
+  rate: number;
+  employee: number;
+  vendor: number;
+  visitor: number;
+  peakStart: string;
+  peakEnd: string;
+}
+export type MergedRow = { date: string } & Partial<Record<ZoneKey, ZoneDay>>;
+
+export function statusFor(rate: number): 'Normal' | 'Warning' | 'Full' {
+  if (rate >= 90) return 'Full';
+  if (rate >= 70) return 'Warning';
+  return 'Normal';
+}
+const statusClass: Record<string, string> = {
+  Normal: 'status-normal', Warning: 'status-warning', Full: 'status-full',
+};
+
+// Local-time only, deliberately — no .toISOString() anywhere here. Mixing UTC-based
+// toISOString() with local-time Date parsing/arithmetic caused "tomorrow" to silently
+// round back down to "today" for any timezone ahead of UTC (e.g. WIB, UTC+7).
+export function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+export function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return toISO(new Date(y, m - 1, d + n));
+}
+export function monthRange(iso: string): [string, string] {
+  const [y, m] = iso.split('-').map(Number);
+  return [toISO(new Date(y, m - 1, 1)), toISO(new Date(y, m, 0))];
+}
+
+const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
+  { value: 'daily', label: 'Daily Forecast' },
+  { value: 'weekly', label: 'Weekly Forecast' },
+  { value: 'monthly', label: 'Monthly Forecast' },
+  { value: 'semester', label: 'Semester Forecast' },
+  { value: 'yearly', label: 'Yearly Forecast' },
+];
 
 export default function AnalyticsPage() {
   const [zones, setZones] = useState<ZoneCapacity[]>([]);
-  const [selectedZoneId, setZoneId] = useState<number | null>(null);
-  const [days, setDays] = useState(30);
-  const [forecast, setForecast] = useState<ForecastDay[]>([]);
-  const [history, setHistory] = useState<OccupancyPoint[]>([]);
-  const [zoneSummary, setZoneSummary] = useState<ZoneCapacity | null>(null);
+  const [merged, setMerged] = useState<MergedRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshedAt, setRefreshedAt] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => addDays(toISO(new Date()), 1));
+  const [granularity, setGranularity] = useState<Granularity>('daily');
+  const [alertDismissed, setAlertDismissed] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
-    apiForecastZones()
-      .then(data => {
-        setZones(data);
-        if (data.length > 0) setZoneId(data[0].zone_id);
-      })
-      .catch(e => setError((e as Error).message));
+    apiForecastZones().then(setZones).catch(e => setError((e as Error).message));
   }, []);
 
+  const zoneIds = useMemo(() => ({
+    west: zones.find(z => z.zone === 'west')?.zone_id,
+    east: zones.find(z => z.zone === 'east')?.zone_id,
+    eastwest: zones.find(z => z.zone === 'eastwest')?.zone_id,
+  }), [zones]);
+
+  const capacityOf = useCallback((zone: ZoneKey) => zones.find(z => z.zone === zone)?.total_capacity ?? 0, [zones]);
+
   const loadData = useCallback(async () => {
-    if (selectedZoneId === null) return;
+    if (!zoneIds.west || !zoneIds.east || !zoneIds.eastwest) return;
     setLoading(true); setError('');
     try {
-      const [dash, hist] = await Promise.all([
-        apiForecastDashboard(selectedZoneId, days),
-        apiOccupancyHistory(selectedZoneId, days * 24),
+      const [w, e, ew] = await Promise.all([
+        apiForecastDashboard(zoneIds.west, 365),
+        apiForecastDashboard(zoneIds.east, 365),
+        apiForecastDashboard(zoneIds.eastwest, 365),
       ]);
-      setForecast(dash.data);
-      setZoneSummary(dash.summary);
-      setHistory(hist);
+      const map = new Map<string, MergedRow>();
+      const put = (zoneKey: ZoneKey, rows: ForecastDay[]) => {
+        rows.forEach(r => {
+          const row = map.get(r.date) ?? { date: r.date };
+          row[zoneKey] = {
+            demand: r.predicted_demand, rate: r.avg_occupancy_rate,
+            employee: r.employee, vendor: r.vendor, visitor: r.visitor,
+            peakStart: r.peak_hour_start, peakEnd: r.peak_hour_end,
+          };
+          map.set(r.date, row);
+        });
+      };
+      put('west', w.data); put('east', e.data); put('eastwest', ew.data);
+      setMerged([...map.values()].sort((a, b) => a.date.localeCompare(b.date)));
+      setRefreshedAt(new Date().toLocaleString());
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [selectedZoneId, days]);
+  }, [zoneIds.west, zoneIds.east, zoneIds.eastwest]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
-  const dailyHistory = (() => {
-    const map = new Map<string, OccupancyPoint[]>();
-    history.forEach(h => {
-      const day = h.timestamp.slice(0, 10);
-      if (!map.has(day)) map.set(day, []);
-      map.get(day)!.push(h);
-    });
-    return [...map.entries()].map(([date, pts]) => ({
-      date,
-      avg_rate: Math.round(pts.reduce((s, p) => s + p.overall_rate_pct, 0) / pts.length),
-      employee: Math.round(pts.reduce((s, p) => s + p.employee_used, 0) / pts.length),
-      vendor: Math.round(pts.reduce((s, p) => s + p.vendor_used, 0) / pts.length),
-      visitor: Math.round(pts.reduce((s, p) => s + p.visitor_used, 0) / pts.length),
-    }));
-  })();
+  const dailyRow = merged.find(r => r.date === selectedDate);
+  const weekEnd = addDays(selectedDate, 6);
+  const weekRows = merged.filter(r => r.date >= selectedDate && r.date <= weekEnd);
+  const [monthStart, monthEnd] = monthRange(selectedDate);
+  const monthRows = merged.filter(r => r.date >= monthStart && r.date <= monthEnd);
 
-  const exportCSV = () => {
-    const rows = [
-      ['Date', 'Predicted', 'Avg Rate %', 'Employee', 'Vendor', 'Visitor', 'Peak Start', 'Peak End'],
-      ...forecast.map(r => [r.date, r.predicted_demand, r.avg_occupancy_rate.toFixed(1), r.employee, r.vendor, r.visitor, r.peak_hour_start, r.peak_hour_end]),
-    ];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `aips_forecast_zone${selectedZoneId}_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  };
+  const windowRows = useMemo(() => {
+    switch (granularity) {
+      case 'daily': return dailyRow ? [dailyRow] : [];
+      case 'weekly': return weekRows;
+      case 'monthly': return monthRows;
+      case 'semester': return merged.filter(r => r.date >= selectedDate && r.date <= addDays(selectedDate, 182));
+      case 'yearly': return merged.filter(r => r.date >= selectedDate && r.date <= addDays(selectedDate, 364));
+    }
+  }, [granularity, dailyRow, weekRows, monthRows, merged, selectedDate]);
 
-  const kpiColor = (rate: number) => rate >= 85 ? 'var(--red)' : rate >= 65 ? 'var(--amber)' : 'var(--teal)';
-  const avgRate = forecast.length ? Math.round(forecast.reduce((s, r) => s + r.avg_occupancy_rate, 0) / forecast.length) : 0;
-  const peakDemand = forecast.length ? Math.max(...forecast.map(r => r.predicted_demand)) : 0;
+  const zoneDayEntries = windowRows.flatMap(r => ZONE_KEYS.map(z => r[z]).filter((d): d is ZoneDay => !!d));
+  const avgOccupancy = zoneDayEntries.length
+    ? Math.round(zoneDayEntries.reduce((s, d) => s + d.rate, 0) / zoneDayEntries.length)
+    : 0;
+  const riskEntries = zoneDayEntries.filter(d => statusFor(d.rate) !== 'Normal');
+  const fullCount = zoneDayEntries.filter(d => statusFor(d.rate) === 'Full').length;
+  const warningCount = riskEntries.length - fullCount;
+
+  const dailyDemand = (dailyRow?.west?.demand ?? 0) + (dailyRow?.east?.demand ?? 0);
+
+  const areaPerformanceData = ZONE_KEYS.map(z => ({
+    zone: ZONE_LABELS[z],
+    rate: dailyRow?.[z]?.rate ?? 0,
+  }));
+
+  const trendData = useMemo(() => {
+    const bucketSpec: Record<Granularity, { size: number; count: number }> = {
+      daily: { size: 1, count: 7 },
+      weekly: { size: 7, count: 8 },
+      monthly: { size: 30, count: 12 },
+      semester: { size: 182, count: 4 },
+      yearly: { size: 365, count: 2 },
+    };
+    const { size, count } = bucketSpec[granularity];
+    const forward = merged.filter(r => r.date >= selectedDate);
+    const buckets: { date: string; demand: number }[] = [];
+    for (let i = 0; i < forward.length && buckets.length < count; i += size) {
+      const chunk = forward.slice(i, i + size);
+      // Only keep genuinely full periods — a trailing partial chunk (e.g. 1 leftover
+      // day of a 182-day semester bucket) would otherwise plot as a false "cliff"
+      // next to full-period sums.
+      if (chunk.length < size) break;
+      const demand = chunk.reduce((s, r) => s + (r.west?.demand ?? 0) + (r.east?.demand ?? 0), 0);
+      buckets.push({ date: chunk[0].date, demand });
+    }
+    return buckets;
+  }, [merged, granularity, selectedDate]);
+
+  const year = new Date(`${selectedDate}T00:00:00`).getFullYear();
+  const recommendedAction = fullCount > 0
+    ? 'Prepare overflow parking and prioritize full areas.'
+    : warningCount > 0
+      ? 'Monitor warning areas closely for the selected period.'
+      : 'No immediate action needed — occupancy is within normal range.';
 
   return (
-    <div style={{ padding: '28px 32px' }} className="fadein">
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Analytics & Forecast</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>Predictive occupancy analytics powered by backend ML model</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => void loadData()} className="btn-secondary" style={{ fontSize: 12 }} disabled={loading}>
-            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          </button>
-          <button onClick={exportCSV} className="btn-secondary" style={{ fontSize: 12 }} disabled={!forecast.length}>
-            <Download size={13} /> Export CSV
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)', color: 'var(--danger-text)', fontSize: 13, marginBottom: 20 }}>
-          {error} — Ensure the backend is running and the AnalyticsData table already contains data.
-        </div>
-      )}
-
-      {/* Controls */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 22, flexWrap: 'wrap' }}>
-        <select value={selectedZoneId ?? ''} onChange={e => setZoneId(Number(e.target.value))}
-          style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: '#fff', color: 'var(--ink)', fontSize: 13, outline: 'none' }}>
-          {zones.map(z => <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>)}
-        </select>
-        {[7, 14, 30, 90].map(d => (
-          <button key={d} onClick={() => setDays(d)} style={{
-            padding: '9px 16px', borderRadius: 9, border: '1px solid', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            borderColor: days === d ? 'var(--red)' : 'var(--border)',
-            background: days === d ? 'var(--red)' : '#fff',
-            color: days === d ? '#fff' : 'var(--text)',
-          }}>{d}D</button>
-        ))}
-      </div>
-
-      {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
-        {[
-          { label: 'Avg Occupancy Rate', value: loading ? '—' : `${avgRate}%`, color: kpiColor(avgRate) },
-          { label: 'Peak Demand', value: loading ? '—' : peakDemand.toString(), color: 'var(--ink)' },
-          { label: 'Total Capacity', value: loading ? '—' : (zoneSummary?.total_capacity ?? '—').toString(), color: 'var(--ink)' },
-          { label: 'Now Available', value: loading ? '—' : (zoneSummary?.total_available ?? '—').toString(), color: 'var(--teal)' },
-        ].map(k => (
-          <div key={k.label} className="card" style={{ padding: '16px 18px' }}>
-            <div className="label" style={{ marginBottom: 8 }}>{k.label}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 700, color: k.color }}>{k.value}</div>
+    <div className="kdash page-pad fadein">
+      <div className="dashboard">
+        {/* Topbar */}
+        <div className="topbar">
+          <div className="title-wrap">
+            <h1>PTMI Parking Forecast Dashboard</h1>
+            <p>Year {year} • Predictive Analytics</p>
           </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 22 }}>
-        {/* Predicted Demand Chart */}
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 16 }}>Predicted Demand ({days}D)</div>
-          {loading ? (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>Memuat…</div>
-          ) : forecast.length === 0 ? (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>Belum ada data forecast di database.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={forecast.slice(-30)} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v) => [v, 'Predicted']} labelFormatter={d => d} />
-                <Area type="monotone" dataKey="predicted_demand" stroke="#E5002B" fill="#E5002B22" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
+          <div className="top-controls">
+            <div className="control-box">
+              <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+            </div>
+            <div className="control-box">
+              <select value={granularity} onChange={e => setGranularity(e.target.value as Granularity)}>
+                {GRANULARITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <button className="export-report-btn no-print" onClick={() => window.print()}>
+              <FileText size={15} /> Export PDF
+            </button>
+            <button className="help-guide-btn no-print" onClick={() => setGuideOpen(true)}>
+              <HelpCircle size={16} />
+            </button>
+          </div>
         </div>
 
-        {/* Category Breakdown Chart */}
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 16 }}>Category Breakdown (avg/day)</div>
-          {loading ? (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>Memuat…</div>
-          ) : forecast.length === 0 ? (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>Belum ada data.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={forecast.slice(-14)} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="employee" name="Employee" fill="#102A43" radius={[3,3,0,0]} />
-                <Bar dataKey="vendor" name="Vendor" fill="#E5002B" radius={[3,3,0,0]} />
-                <Bar dataKey="visitor" name="Visitor" fill="#F5A400" radius={[3,3,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+        {error && (
+          <div className="risk-alert" style={{ borderColor: 'var(--red-mid)', background: 'var(--danger-bg)' }}>
+            <div className="risk-alert-left"><AlertTriangle /> <span>{error} — ensure the backend is running.</span></div>
+          </div>
+        )}
+
+        {!error && !alertDismissed && riskEntries.length > 0 && (
+          <div className="risk-alert">
+            <div className="risk-alert-left">
+              <AlertTriangle />
+              <span>High Risk Alert: <strong>{riskEntries.length}</strong> warning/full records detected in selected period</span>
+            </div>
+            <button className="risk-alert-close" onClick={() => setAlertDismissed(true)}><X size={15} /></button>
+          </div>
+        )}
+
+        {/* KPI row */}
+        <div className="kpi-row">
+          <div className={`kpi-card${granularity === 'daily' ? ' active-daily' : ''}`}>
+            <div className="kpi-label">Daily Records</div>
+            <div className="kpi-value">{loading ? '—' : dailyDemand.toLocaleString()}</div>
+            <div className="kpi-sub">Selected day forecast</div>
+          </div>
+          <div className={`kpi-card${granularity === 'weekly' ? ' active-weekly' : ''}`}>
+            <div className="kpi-label">Weekly Records</div>
+            <div className="kpi-value">{loading ? '—' : weekRows.length}</div>
+            <div className="kpi-sub">Weekly forecast rows</div>
+          </div>
+          <div className={`kpi-card${(granularity === 'monthly' || granularity === 'semester' || granularity === 'yearly') ? ' active-monthly' : ''}`}>
+            <div className="kpi-label">Monthly Records</div>
+            <div className="kpi-value">{loading ? '—' : monthRows.length}</div>
+            <div className="kpi-sub">Monthly forecast rows</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Avg. Occupancy</div>
+            <div className="kpi-value">{loading ? '—' : `${avgOccupancy}%`}</div>
+            <div className="kpi-sub">Based on selected view</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Risk Areas</div>
+            <div className="kpi-value">{loading ? '—' : riskEntries.length}</div>
+            <div className="kpi-sub">Full / Warning status</div>
+          </div>
+        </div>
+
+        {/* Upper grid: 2 charts */}
+        <div className="main-content">
+        <div className="upper-grid two">
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Area Performance</h3>
+              <span className="card-sub">Selected: {selectedDate}</span>
+            </div>
+            <div className="chart-area">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={areaPerformanceData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--k-border)" />
+                  <XAxis dataKey="zone" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Occupancy']} />
+                  <Bar dataKey="rate" fill="#F5A400" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="card area-card">
+            <div className="card-header">
+              <h3 className="card-title">Parking Occupancy Forecast Trend</h3>
+              <span className="card-sub">{GRANULARITY_OPTIONS.find(o => o.value === granularity)?.label}</span>
+            </div>
+            <div className="chart-area">
+              {trendData.length > 1 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--k-border)" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v) => [v, 'Predicted demand']} />
+                    <Area type="monotone" dataKey="demand" stroke="#E5002B" fill="#E5002B22" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--k-muted)' }}>
+                  <div style={{ fontSize: 11, textAlign: 'center' }}>
+                    Only one full {granularity} period exists in the current forecast horizon —
+                    not enough data yet for a trend line.
+                  </div>
+                  {trendData.length === 1 && (
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: 'var(--k-muted)' }}>{trendData[0].date}</div>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--mattel-red)' }}>{trendData[0].demand.toLocaleString()}</div>
+                      <div style={{ fontSize: 11 }}>predicted demand</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Lower grid: insights + preview table */}
+        <div className="lower-grid">
+          <div className="card">
+            <div className="card-header"><h3 className="card-title">Forecast Insights</h3></div>
+            <div className="insight-list">
+              <div className="insight-item">
+                <div className="insight-icon blue"><Flame color="var(--mattel-red)" /></div>
+                <div className="insight-text">
+                  <strong>Full Area Count</strong>
+                  <span>{fullCount} Full records in selected period</span>
+                </div>
+              </div>
+              <div className="insight-item">
+                <div className="insight-icon amber"><ShieldAlert color="var(--k-amber)" /></div>
+                <div className="insight-text">
+                  <strong>Warning Area Count</strong>
+                  <span>{warningCount} Warning records in selected period</span>
+                </div>
+              </div>
+              <div className="insight-item">
+                <div className="insight-icon green"><ShieldCheck color="var(--k-teal)" /></div>
+                <div className="insight-text">
+                  <strong>Recommended Action</strong>
+                  <span>{recommendedAction}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Forecast Preview (Next 7 Days)</h3>
+              <span className="card-sub">Selected start date + 7 days</span>
+            </div>
+            <div className="preview-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th><th>Total</th>
+                    <th>West Av.</th><th>West St.</th>
+                    <th>East Av.</th><th>East St.</th>
+                    <th>E&amp;W Av.</th><th>E&amp;W St.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 20 }}>Loading…</td></tr>
+                  ) : weekRows.length === 0 ? (
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 20 }}>No forecast data for this range.</td></tr>
+                  ) : weekRows.map(r => {
+                    const total = (r.west?.demand ?? 0) + (r.east?.demand ?? 0);
+                    return (
+                      <tr key={r.date}>
+                        <td>{r.date}</td>
+                        <td>{total.toLocaleString()}</td>
+                        {ZONE_KEYS.map(z => {
+                          const d = r[z];
+                          // Available slots from occupancy RATE (a real snapshot percentage),
+                          // not predicted_demand (a daily entry-count/flow metric that can
+                          // exceed capacity many times over via turnover — subtracting it from
+                          // capacity would not mean "available slots").
+                          const avail = d ? Math.max(0, Math.round(capacityOf(z) * (1 - d.rate / 100))) : 0;
+                          const st = d ? statusFor(d.rate) : 'Normal';
+                          return (
+                            <Fragment key={z}>
+                              <td>{d ? avail : '—'}</td>
+                              <td><span className={`status-badge ${statusClass[st]}`}>{st}</span></td>
+                            </Fragment>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <div className="footer">
+          <span>Forecast horizon: next 365 days</span>
+          <span>Data refreshed: {refreshedAt || '—'}</span>
         </div>
       </div>
 
-      {/* Historical Occupancy */}
-      {dailyHistory.length > 0 && (
-        <div className="card" style={{ padding: 20, marginBottom: 22 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 16 }}>Actual Occupancy Rate History (%)</div>
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={dailyHistory} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
-              <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
-              <Tooltip formatter={(v) => [`${v}%`, 'Avg Rate']} />
-              <Area type="monotone" dataKey="avg_rate" stroke="#159A72" fill="#159A7222" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
+      {guideOpen && (
+        <div className="kdash-guide-overlay" onClick={() => setGuideOpen(false)}>
+          <div className="kdash-guide-modal" onClick={e => e.stopPropagation()}>
+            <div className="kdash-guide-header">
+              <div>
+                <h2>Dashboard Guide</h2>
+                <p>How to read the parking forecast dashboard</p>
+              </div>
+              <button className="kdash-guide-close" onClick={() => setGuideOpen(false)}>×</button>
+            </div>
+            <div className="kdash-guide-body">
+              <div className="kdash-guide-grid">
+                <div className="kdash-guide-section">
+                  <h3>Date &amp; Granularity</h3>
+                  <p>Pick a start date, then choose Daily, Weekly, Monthly, Semester, or Yearly to
+                  change how the trend chart and KPI cards aggregate the forecast.</p>
+                </div>
+                <div className="kdash-guide-section">
+                  <h3>Zones</h3>
+                  <p>West and East are real, independently forecast zones. East &amp; West is a
+                  combined view — its numbers are the sum of West and East, not a separate area.</p>
+                </div>
+                <div className="kdash-guide-section full">
+                  <h3>Status badges</h3>
+                  <div className="kdash-guide-badges">
+                    <div className="kdash-guide-badge-row"><span className="status-badge status-normal">Normal</span> occupancy under 70%</div>
+                    <div className="kdash-guide-badge-row"><span className="status-badge status-warning">Warning</span> occupancy 70–89%</div>
+                    <div className="kdash-guide-badge-row"><span className="status-badge status-full">Full</span> occupancy 90% or above</div>
+                  </div>
+                </div>
+              </div>
+              <div className="kdash-guide-note">
+                Forecasts are generated by an ARIMA model retrained nightly on real entry/exit and
+                occupancy history. Longer horizons (Semester/Yearly) are naturally less precise than
+                Daily/Weekly, since the model has no seasonal component.
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Forecast Table */}
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', fontWeight: 800, fontSize: 12, letterSpacing: '.04em' }}>
-          FORECAST DATA TABLE
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead><tr>
-              <th>Date</th><th>Predicted</th><th>Occ. Rate</th><th>Employee</th><th>Vendor</th><th>Visitor</th><th>Peak Hours</th><th>Status</th>
-            </tr></thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>Memuat…</td></tr>
-              ) : forecast.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>
-                  No data available, run the ML forecasting pipeline to populate the AnalyticsData table.
-                </td></tr>
-              ) : forecast.map(r => {
-                const rate = r.avg_occupancy_rate;
-                const statusColor = rate >= 85 ? 'var(--red)' : rate >= 65 ? 'var(--amber)' : 'var(--teal)';
-                const statusLabel = rate >= 85 ? 'High'       : rate >= 65 ? 'Moderate'     : 'Normal';
-                return (
-                  <tr key={r.date}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.date}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{r.predicted_demand}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--border)' }}>
-                          <div style={{ height: '100%', borderRadius: 2, width: `${Math.min(rate, 100)}%`, background: statusColor }} />
-                        </div>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: statusColor, fontWeight: 600, width: 36 }}>
-                          {rate.toFixed(1)}%
-                        </span>
-                      </div>
-                    </td>
-                    <td>{r.employee}</td>
-                    <td>{r.vendor}</td>
-                    <td>{r.visitor}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{r.peak_hour_start}–{r.peak_hour_end}</td>
-                    <td>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>
-                        {statusLabel}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ForecastReportPrint merged={merged} selectedDate={selectedDate} zones={zones} />
     </div>
   );
 }

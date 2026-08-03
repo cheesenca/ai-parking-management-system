@@ -1,4 +1,5 @@
 'use client';
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { AuthUser } from '@/lib/types';
 import {
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const stored = sessionStorage.getItem(USER_KEY);
       if (stored) setUser(JSON.parse(stored));
     } catch {
-
+      //
     }
     setLoading(false);
   }, []);
@@ -65,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRegister(data);
       return { ok: true, message: res.message };
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : 'Registrasi gagal' };
+      return { ok: false, message: err instanceof Error ? err.message : 'Registration Failed' };
     }
   };
 
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiForgotPassword(email, newPassword);
       return { ok: true, message: res.message };
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : 'Gagal mereset password' };
+      return { ok: false, message: err instanceof Error ? err.message : 'Password Reset Failed' };
     }
   };
 

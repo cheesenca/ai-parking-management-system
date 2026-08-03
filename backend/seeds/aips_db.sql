@@ -60,7 +60,12 @@ CREATE TABLE `analytics_data` (
   `peak_hour_start` time NOT NULL,
   `peak_hour_end` time NOT NULL,
   `avg_occupancy_rate` float NOT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp()
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `period_type` varchar(10) NOT NULL DEFAULT 'daily',
+  `area_code` varchar(10) DEFAULT NULL,
+  `period_label` varchar(20) DEFAULT NULL,
+  `predicted_available` int(11) DEFAULT NULL,
+  `status` varchar(10) DEFAULT 'Normal'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -261,7 +266,10 @@ ALTER TABLE `admin_user`
 --
 ALTER TABLE `analytics_data`
   ADD PRIMARY KEY (`analytics_id`),
-  ADD KEY `zone_id` (`zone_id`);
+  ADD KEY `zone_id` (`zone_id`),
+  ADD KEY `idx_analytics_date` (`record_date`),
+  ADD KEY `idx_analytics_period_area` (`period_type`,`area_code`),
+  ADD UNIQUE KEY `uq_analytics_zone_date_area` (`zone_id`,`record_date`,`period_type`,`area_code`);
 
 --
 -- Indexes for table `entry_exit_log`

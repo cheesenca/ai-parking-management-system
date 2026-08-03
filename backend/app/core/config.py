@@ -36,10 +36,10 @@ class Settings(BaseSettings):
     FORECAST_DATA_DIR: Path = FORECAST_ROOT / "forecast" / "data"
 
     # Model Files
-    OCCUPANCY_MODEL_PATH: Path = BASE_DIR / "models" / "pklot.pt"
-    OCR_MODEL_PATH: Path = BASE_DIR / "models" / "parkwise_detector.pt"
-    ARIMA_MODEL_PATH: Path = BASE_DIR / "models" / "arima.joblib"
-    PROPHET_MODEL_PATH: Path = BASE_DIR / "models" / "prophet.joblib"
+    OCCUPANCY_MODEL_PATH: Path = BASE_DIR / "models" / "pytorch" / "pklot.pt"
+    OCR_MODEL_PATH: Path = BASE_DIR / "models" / "pytorch" / "parkwise_detector.pt"
+    ARIMA_MODEL_PATH: Path = BASE_DIR / "models" / "joblib" / "arima.joblib"
+    PROPHET_MODEL_PATH: Path = BASE_DIR / "models" / "joblib" / "prophet.joblib"
 
     # Perspective / Homography
     HOMOGRAPHY_SRC: Optional[List] = None
@@ -48,13 +48,24 @@ class Settings(BaseSettings):
     HOMOGRAPHY_MATRIX: Path = SLOT_ROOT / "data" / "homography_matrix.npy"
 
     # YOLO & Inference Hyperparameters
-    YOLO_BASE_MODEL: str = "yolov8n.pt"
+    YOLO_BASE_MODEL: str = "yolov8s.pt"
     YOLO_DEVICE: str = os.getenv("YOLO_DEVICE", "cuda")
     YOLO_IMGSZ: int = 1280
     VEHICLE_CLASSES: List[int] = [2, 3, 5, 7]
     YOLO_CONF: float = float(os.getenv("YOLO_CONF", "0.25"))
     YOLO_IOU_NMS: float = float(os.getenv("YOLO_IOU_NMS", "0.8"))
     IOU_THRESHOLD: float = float(os.getenv("IOU_THRESHOLD", "0.30"))
+
+    # Prophet Retraining 
+    PROPHET_MIN_OBSERVATIONS: int = 30
+    PROPHET_HOLDOUT_DAYS: int = 7
+    PROPHET_OUTLIER_ZSCORE: float = 3.0
+    PROPHET_WEEKLY_SEASONALITY: bool = True
+    PROPHET_YEARLY_SEASONALITY: bool = False
+    PROPHET_DAILY_SEASONALITY: bool = False
+    PROPHET_RETRAIN_ENABLED: bool = os.getenv("PROPHET_RETRAIN_ENABLED", "true").lower() == "true"
+    PROPHET_RETRAIN_HOUR: int = int(os.getenv("PROPHET_RETRAIN_HOUR", "2"))
+    PROPHET_RETRAIN_MINUTE: int = int(os.getenv("PROPHET_RETRAIN_MINUTE", "0"))
 
     # Database & Network
     DATABASE_URL: str = os.getenv(

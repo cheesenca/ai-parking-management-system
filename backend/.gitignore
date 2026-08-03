@@ -1,36 +1,50 @@
-# Virtual environments
+# OS-specific files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Environment & Secret files
+.env*
+!.env.example
+.env.local
+
+# Python files & Virtual Environments
 venv/
 .venv/
 env/
-ENV/
-
-# Python cache
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-.Python
+.pytest_cache/
 
-# Distribution / packaging
-*.egg-info/
+# Node.js & Next.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+/.next/
+/out/
+
+# Build & Compiled artifacts
 dist/
 build/
-*.egg
+target/
+*.out
+*.o
+*.class
+*.jar
+*.war
+*.ear
 
-# Jupyter
-.ipynb_checkpoints/
+# Logs, Temp, & Dead Letters
+logs/
+*.log
+tmp/
+dead_letters/
 
-# Environment variables
-.env
-.env.*
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
+# IDE & Editors
 .vscode/
 .idea/
-
-# YOLO training outputs
-runs/
+*.iml

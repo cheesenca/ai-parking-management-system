@@ -1,9 +1,10 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
 import { useLiveDetection, useSlotOccupancy, useSlotDetection, CAMERA_INDEX_BY_ZONE } from '@/lib/api';
-import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
+import { Wifi, WifiOff, Cpu, Settings, AlertTriangle } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
 import SlotDetectionCamera from '@/components/SlotDetectionCamera';
@@ -14,18 +15,17 @@ import SetCapacityModal from '@/components/SetCapacityModal';
 const zoneOptions: { value: Zone; label: string }[] = [
   { value: 'west', label: 'West Plant' },
   { value: 'east', label: 'East Plant' },
-  { value: 'eastwest', label: 'East & West Plant' },
 ];
 
 export default function TrackerPage() {
   const { user } = useAuth();
   const defaultZone = (user?.location ?? 'west') as Zone;
   const [selectedZone, setSelectedZone] = useState<Zone>(defaultZone);
-  const lpr = useLiveDetection({ cameraIndex: 0, enabled: true });
-  // const lpr = useLiveDetection({ cameraIndex: 1, enabled: false });
+  // const lpr = useLiveDetection({ cameraIndex: 0, enabled: true });
+  const lpr = useLiveDetection({ cameraIndex: 0, enabled: false });
   const slots = useSlotOccupancy(selectedZone);
-  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: false });
-  // const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: true });
+  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: true });
+  // const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: false });
   const [latestIn, setLatestIn] = useState('—');
   const [latestOut, setLatestOut] = useState('—');
   const [capacityModalOpen, setCapacityModalOpen] = useState(false);
@@ -37,8 +37,8 @@ export default function TrackerPage() {
   }, [lpr.latest]);
 
   return (
-    <div style={{ padding: '28px 32px' }} className="fadein">
-      {/* HEADER UTAMA */}
+    <div className="page-pad fadein">
+      {/* MAIN HEADER */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Parking Tracker</h1>
@@ -47,12 +47,23 @@ export default function TrackerPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ConnPill label="LPR CAMERA" state={lpr.conn} icon={lpr.conn === 'live' ? Wifi : WifiOff} />
           <ConnPill label="SLOT SCANNER" state={slots.conn} icon={Cpu} />
+          {slots.isAnomaly && (
+            <span
+              title={`${slots.ghostVehicles} occupied slot(s) with no matching validated entry`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8,
+                background: 'var(--warn-bg)', border: '1px solid #FDE68A', color: 'var(--warn-text)',
+                fontSize: 11, fontWeight: 700,
+              }}
+            >
+              <AlertTriangle size={13} /> {slots.ghostVehicles} UNVERIFIED
+            </span>
+          )}
         </div>
       </div>
 
       {/* 1. GRID KIRI & KANAN (Sejajar sampai Live Slot Map) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        
+      <div className="grid-2" style={{ marginBottom: 20 }}>
         {/* KOLOM KIRI: Live Detection (YOLOv8 + EasyOCR) */}
         <div>
           <LiveDetection lpr={lpr} selectedZone={selectedZone} />
@@ -60,7 +71,6 @@ export default function TrackerPage() {
 
         {/* KOLOM KANAN: Slot Camera, Post Location, dan Slot Map */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          
           {/* Slot Detection naik ke posisi paling atas di kolom kanan */}
           <SlotDetectionCamera detection={slotDetection} />
           
@@ -82,19 +92,17 @@ export default function TrackerPage() {
 
           {/* Peta Slot Parkir */}
           <SlotMap slots={slots} />
-          
         </div>
       </div>
 
       {/* 2. BAGIAN BAWAH: Elemen yang Melebar Full-Width */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        
         {/* Available Slots by Category */}
         <CategoryStats slots={slots} />
         
         {/* Kartu Status & Set Capacity (Diperluas) */}
         <div className="card" style={{ padding: 24 }}> {/* Padding diperbesar */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="grid-2" style={{ gap: 16 }}>
             <div style={{ padding: 18, borderRadius: 12, background: 'var(--green-bg)', border: '1px solid #6EE7B7' }}>
               <div className="label" style={{ color: 'var(--green-text)', marginBottom: 8, fontSize: 12 }}>Latest In</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--green-text)' }}>{latestIn}</div>
@@ -114,7 +122,6 @@ export default function TrackerPage() {
             </button>
           )}
         </div>
-
       </div>
 
       {capacityModalOpen && (

@@ -18,7 +18,7 @@ from app.core.database import get_db, SessionLocal
 from app.core.models import EntryExitLog, OccupancySnapshot, ParkingSlot, ParkingZone, ParkingSession
 from app.features.occupancy.schemas.slots import CategoryInfo, DetectionEvent, ZoneUpdate, CapacityUpdate
 from app.features.occupancy.services.occupancy import SlotSmoother
-from app.features.auth.api import get_current_user
+from app.features.auth.endpoints import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,10 @@ router = APIRouter()
 ws_router = APIRouter(tags=["WebSocket"])
 
 _slot_model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+
+SNAPSHOT_INTERVAL_SEC = 60
+_LAST_SNAPSHOT_AT: dict[str, datetime] = {}
+
 
 def _bootstrap(f: str) -> None:
     """
@@ -41,6 +45,7 @@ def _bootstrap(f: str) -> None:
         sys.path.insert(0, str(proj))
 
 _bootstrap(__file__)
+
 
 def _build_layout(prefix: str) -> list[dict]:
     """
@@ -61,9 +66,8 @@ SLOT_LAYOUTS: dict[str, list[dict]] = {"west": _build_layout("W"), "east": _buil
 SLOT_LAYOUTS["eastwest"] = SLOT_LAYOUTS["west"] + SLOT_LAYOUTS["east"]
 
 ZONE_CAMERA_DEVICE: dict[str, str] = {
-    "west": "0",
-    "east": "0",      
-    "eastwest": "0",  
+    "west": "1",
+    "east": "1",
 }
 
 COLOR_AVAIL = (30, 200, 60)
@@ -270,11 +274,19 @@ def _draw_calibrated_slots(frame, calibration: List[dict], status: Dict[str, str
         cv2.addWeighted(ov, 0.28, out, 0.72, 0, out)
         cv2.polylines(out, [np.array(pts, dtype=np.int32)], True, color, 2)
 
-        txt = f'{s["id"]} - {label}'
-        tx, ty = pts[0]
-        (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        cv2.rectangle(out, (tx, max(0, ty - th - 8)), (tx + tw + 6, ty), color, -1)
-        cv2.putText(out, txt, (tx + 3, ty - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        cx, cy = sum(xs) // len(xs), sum(ys) // len(ys)
+        slot_w = max(xs) - min(xs)
+        slot_h = max(ys) - min(ys)
+
+        font_scale = max(0.28, min(0.42, min(slot_w, slot_h) / 90))
+        txt = str(s["id"])
+        (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+        tx, ty = cx - tw // 2, cy + th // 2
+
+        cv2.putText(out, txt, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(out, txt, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
     return out
 
 
@@ -303,6 +315,10 @@ def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dic
         if not zone:
             return
 
+        cat_total: dict[str, int] = {}
+        for s in layout:
+            cat_total[s["category"]] = cat_total.get(s["category"], 0) + 1
+
         used_by_cat: dict[str, int] = {}
         for sid, st in status.items():
             cat = id2cat.get(sid, "Employee")
@@ -327,6 +343,30 @@ def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dic
         zone.vendor_used = used_by_cat.get("Vendor", 0)
         zone.visitor_used = used_by_cat.get("Visitor", 0)
         zone.used_capacity = sum(used_by_cat.values())
+
+        now = datetime.utcnow()
+        last = _LAST_SNAPSHOT_AT.get(zone_key)
+        if last is None or (now - last).total_seconds() >= SNAPSHOT_INTERVAL_SEC:
+            total_cap = sum(cat_total.values())
+            total_occ = zone.used_capacity
+            total_avail = max(total_cap - total_occ, 0)
+            rate = (total_occ / total_cap * 100) if total_cap else 0.0
+            db.add(OccupancySnapshot(
+                zone_id=zone.zone_id,
+                recorded_at=now,
+                total_capacity=total_cap,
+                total_occupied=total_occ,
+                total_available=total_avail,
+                overall_rate_pct=rate,
+                employee_used=zone.employee_used, employee_total=cat_total.get("Employee", 0),
+                vendor_used=zone.vendor_used, vendor_total=cat_total.get("Vendor", 0),
+                visitor_used=zone.visitor_used, visitor_total=cat_total.get("Visitor", 0),
+            ))
+            _LAST_SNAPSHOT_AT[zone_key] = now
+            logger.info(
+                f"zone={zone_key} OccupancySnapshot written: "
+                f"{total_occ}/{total_cap} occupied ({rate:.1f}%)"
+            )
         db.commit()
     except Exception as e:
         db.rollback()
@@ -370,26 +410,32 @@ async def slots_camera_ws(
         """
         Internal function to open the camera hardware or a video stream file
         """
-        if isinstance(source, int):
-            c = cv2.VideoCapture(source, cv2.CAP_DSHOW)
-            if not c.isOpened():
+        import time
+
+        c = None
+        for attempt in range(4):
+            if isinstance(source, int):
+                c = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+                if not c.isOpened():
+                    c.release()
+                    c = cv2.VideoCapture(source)
+            else:
+                c = cv2.VideoCapture(source)
+
+            if c.isOpened():
+                for _ in range(5):
+                    ok, _ = c.read()
+                    if ok:
+                        return c
+                    time.sleep(0.15)
                 c.release()
-                c = cv2.VideoCapture(source) 
-        else:
-            c = cv2.VideoCapture(source)
 
-        if c.isOpened():
-            import time
-
-            for _ in range(5):
-                ok, _ = c.read()
-                if ok:
-                    break
-                time.sleep(0.15)
+            logger.warning(f"Camera '{source}' open attempt {attempt + 1}/4 failed, retrying...")
+            time.sleep(0.4)
         return c
 
     cap = await loop.run_in_executor(None, _open_camera)
-    if not cap.isOpened():
+    if not cap or not cap.isOpened():
         await websocket.send_json({"error": f"Camera/Video '{resolved_source}' unavailable.", "conn": "disconnected"})
         await websocket.close()
         return
@@ -398,6 +444,19 @@ async def slots_camera_ws(
     ref_thumb = await loop.run_in_executor(None, _load_reference_thumb, zone) if calibration else None
     slot_ids = [s["id"] for s in (calibration or layout)]
     smoother = SlotSmoother(slot_ids, window=8, min_votes_to_flip=5)
+
+    if not calibration:
+        logger.warning(
+            f"zone={zone} NOT CALIBRATED — open Slot Calibration, save a layout, "
+            f"then reconnect. DB writes (ParkingSlot/OccupancySnapshot) are skipped until then."
+        )
+    elif ref_thumb is None:
+        logger.warning(
+            f"zone={zone} calibrated but reference image is missing/unreadable — "
+            f"re-save calibration. DB writes are skipped until alignment can be checked."
+        )
+    else:
+        logger.info(f"zone={zone} calibration loaded ({len(calibration)} slots), reference image OK.")
 
     try:
         last_push = 0.0
@@ -429,6 +488,9 @@ async def slots_camera_ws(
                     f"zone={zone} good_feature_matches={align_score} "
                     f"(need >= 12, aligned={use_calibration})"
                 )
+                last_align_log = loop.time()
+            elif calibration and ref_thumb is None and (loop.time() - last_align_log) >= 5.0:
+                logger.warning(f"zone={zone} skipping DB writes: no reference image loaded.")
                 last_align_log = loop.time()
 
             if use_calibration:
@@ -546,6 +608,57 @@ def get_live_slots(
     }
 
 
+# GET /api/slots/calibration/{zone_key}/snapshot
+@router.get("/calibration/{zone_key}/snapshot")
+def calibration_snapshot(zone_key: str, current_user=Depends(get_current_user)):
+    """
+    Grabs a single still frame from the zone's configured camera
+    """
+    if zone_key not in SLOT_LAYOUTS:
+        raise HTTPException(status_code=404, detail=f"Unknown zone '{zone_key}'")
+
+    import cv2
+    resolved_source = ZONE_CAMERA_DEVICE.get(zone_key, "0")
+    source = int(resolved_source) if str(resolved_source).isdigit() else resolved_source
+
+    if isinstance(source, int):
+        cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap.release()
+            cap = cv2.VideoCapture(source)
+    else:
+        cap = cv2.VideoCapture(source)
+
+    if not cap.isOpened():
+        cap.release()
+        raise HTTPException(status_code=503, detail=f"Camera/Video '{resolved_source}' unavailable.")
+
+    try:
+        frame = None
+        for _ in range(5):
+            ok, f = cap.read()
+            if ok:
+                frame = f
+                break
+        if frame is None:
+            raise HTTPException(status_code=503, detail=f"Could not read a frame from camera '{resolved_source}'.")
+
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to encode camera snapshot")
+
+        height, width = frame.shape[:2]
+        return {
+            "zone": zone_key,
+            "width": width,
+            "height": height,
+            "image": base64.b64encode(buf).decode("utf-8"),
+            "default_slots": SLOT_LAYOUTS[zone_key],
+        }
+    finally:
+        cap.release()
+
+
 # GET /api/slots/calibration/{zone_key}/defaults
 @router.get("/calibration/{zone_key}/defaults")
 def calibration_defaults(zone_key: str, current_user=Depends(get_current_user)):
@@ -609,6 +722,30 @@ def save_calibration(zone_key: str, payload: dict, current_user=Depends(get_curr
 
     _save_calibration(zone_key, slots)
     _reference_image_path(zone_key).write_bytes(ref_bytes)
+
+    db = SessionLocal()
+    try:
+        zone = db.query(ParkingZone).filter(ParkingZone.zone_key == zone_key).first()
+        if zone:
+            for s in slots:
+                slot = db.query(ParkingSlot).filter(
+                    ParkingSlot.zone_id == zone.zone_id,
+                    ParkingSlot.slot_label == s["id"],
+                ).first()
+                if slot:
+                    slot.coordinates_polygon = s["polygon"]
+                    slot.category = s["category"]
+                else:
+                    db.add(ParkingSlot(
+                        zone_id=zone.zone_id, slot_label=s["id"], category=s["category"],
+                        current_status="Available", coordinates_polygon=s["polygon"],
+                    ))
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to sync calibration polygons to DB: {e}")
+    finally:
+        db.close()
 
     return {"zone": zone_key, "saved": len(slots), "calibrated": True}
 

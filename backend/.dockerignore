@@ -1,19 +1,35 @@
-# Python Virtual Environments
+# Python virtual environments & cache
 venv/
 .venv/
 env/
-
-# Python Cache & Compiled Files 
+ENV/
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 .pytest_cache/
 
-# Large Media & Machine Learning Artifacts
-models/
-data/
-
-# Application Logs & Environment Secrets
-logs/
+# Environment files & Secrets
 .env
+.env.*
+
+# Logs & Temporary files
+logs/
+*.log
+
+# ML Models & Data
+# models/
+# data/
+
+# Git, IDE, OS
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile*
+docker-compose*
+.dockerignore

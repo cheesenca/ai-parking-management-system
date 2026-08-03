@@ -3,7 +3,9 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import type { Member, Zone, Category } from '@/lib/types';
 import { apiGetMembers, apiCreateMember, apiUpdateMember, apiDeleteMember, apiImportMembers } from '@/lib/backendApi';
-import { Plus, Pencil, Trash2, X, Check, Search, Download, Upload, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, Search, Download, Upload, RefreshCw, ChevronLeft, ChevronRight, ArrowUpAZ, ArrowDownAZ } from 'lucide-react';
+
+const PAGE_SIZE = 10;
 
 const zoneLabels: Record<Zone | 'All', string> = {
   All: 'All Zones', 
@@ -61,6 +63,9 @@ export default function MembersPage() {
   const [activeZone, setActiveZone] = useState<Zone | 'All'>('All');
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState<Category | 'All'>('All');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<number[]>([]);
   const [modal, setModal] = useState<ModalType>(null);
   const [editMember, setEditMember] = useState<Member | null>(null);
@@ -72,24 +77,34 @@ export default function MembersPage() {
   const fetchMembers = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const members = await apiGetMembers({
+      const res = await apiGetMembers({
         zone: activeZone !== 'All' ? activeZone : undefined,
         category: filterCat !== 'All' ? filterCat : undefined,
         search: search || undefined,
+        sort: sortDir,
+        page,
+        page_size: PAGE_SIZE,
       });
-      setData(members);
+      setData(res.items);
+      setTotal(res.total);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [activeZone, filterCat, search]);
+  }, [activeZone, filterCat, search, sortDir, page]);
 
   useEffect(() => {
     void fetchMembers();
   }, [fetchMembers]);
 
+  // Filters/search/sort invalidate the current page — jump back to page 1
+  useEffect(() => {
+    setPage(1);
+  }, [activeZone, filterCat, search, sortDir]);
+
   const filtered = useMemo(() => data, [data]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const openAdd = () => { 
     setForm(EMPTY_MEMBER); setFormError(''); setModal('add'); 
   };
@@ -263,13 +278,13 @@ export default function MembersPage() {
 
   return (
     <>
-      <div style={{ padding: '28px 32px' }} className="fadein">
+      <div className="page-pad fadein">
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Members</h1>
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-              Manage registered vehicle members · {loading ? '…' : `${data.length} total`}
+              Manage registered vehicle members · {loading ? '…' : `${total} total`}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -339,7 +354,17 @@ export default function MembersPage() {
               <thead>
                 <tr>
                   <th><input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} /></th>
-                  <th>KPK</th><th>Name</th><th>Zone</th><th>Cat.</th>
+                  <th>KPK</th>
+                  <th>
+                    <button
+                      onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0 }}
+                      title={sortDir === 'asc' ? 'Sorted A–Z (click for Z–A)' : 'Sorted Z–A (click for A–Z)'}
+                    >
+                      Name {sortDir === 'asc' ? <ArrowUpAZ size={12} /> : <ArrowDownAZ size={12} />}
+                    </button>
+                  </th>
+                  <th>Zone</th><th>Cat.</th>
                   <th>Plate 1</th><th>Plate 2</th><th>Type</th>
                   <th>SIM Exp</th><th>STNK Exp</th><th>Status</th><th>Actions</th>
                 </tr>
@@ -379,6 +404,31 @@ export default function MembersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {loading ? 'Loading…' : total === 0 ? 'No members' : `Page ${page} of ${totalPages}`}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn-secondary"
+                style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={loading || page <= 1}
+              >
+                <ChevronLeft size={13} /> Prev
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={loading || page >= totalPages}
+              >
+                Next <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -420,7 +470,7 @@ export default function MembersPage() {
 
               {/* Section: Identity */}
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Identity</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div className="grid-2" style={{ gap: 12, marginBottom: 20 }}>
                 {FIELDS.slice(0, 2).map(f => (
                   <div key={f.key}>
                     <label style={labelStyle}>{f.label}</label>
@@ -433,7 +483,7 @@ export default function MembersPage() {
 
               {/* Section: Vehicle */}
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Vehicle</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div className="grid-2" style={{ gap: 12, marginBottom: 20 }}>
                 {FIELDS.slice(2, 6).map(f => (
                   <div key={f.key}>
                     <label style={labelStyle}>{f.label}</label>
@@ -446,7 +496,7 @@ export default function MembersPage() {
 
               {/* Section: Documents */}
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Documents</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div className="grid-2" style={{ gap: 12, marginBottom: 20 }}>
                 {FIELDS.slice(6, 8).map(f => (
                   <div key={f.key}>
                     <label style={labelStyle}>{f.label}</label>
@@ -459,7 +509,7 @@ export default function MembersPage() {
 
               {/* Section: Assignment */}
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Assignment</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="grid-2" style={{ gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Registered Plant</label>
                   <select value={form.registered_plant}

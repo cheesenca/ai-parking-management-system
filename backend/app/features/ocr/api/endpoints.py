@@ -4,14 +4,18 @@ import sys
 import cv2
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from typing import Optional, Literal
 
 # Add pipeline directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
 
-from app.core.database import SessionLocal
-from app.core.models import EntryExitLog, ParkingZone
+from app.core.database import SessionLocal, get_db
+from app.core.models import EntryExitLog, ParkingZone, Vehicle, ParkingSession
+from app.features.auth.endpoints import get_current_user
 
 # App setup 
 router = APIRouter()
@@ -92,6 +96,80 @@ def simulate_scan():
         "event_type": random.choice(['entry', 'exit']),
         "timestamp": __import__('datetime').datetime.now().isoformat(),
         "status": "detected",
+    }
+
+
+class ManualApprovePayload(BaseModel):
+    plate: str
+    zone: str
+    event_type: Literal["entry", "exit"]
+    timestamp: str
+    original_confidence: Optional[float] = None
+
+
+# Manual approval endpoint (HTTP)
+@router.post("/manual-approve")
+def manual_approve_plate(payload: ManualApprovePayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """
+    Manually confirm a plate that the automated OCR pipeline flagged as
+    low-confidence / unreadable. Classifies the plate against registered
+    members, writes an entry_exit_log row, and keeps parking_session in sync
+    — mirroring what /api/v1/slots/detection does for automated detections.
+    """
+    zone = db.query(ParkingZone).filter(ParkingZone.zone_key == payload.zone).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail=f"Zone '{payload.zone}' not found")
+
+    plate = payload.plate.strip().upper()
+    vehicle = db.query(Vehicle).filter(Vehicle.plate_number == plate).first()
+    member = vehicle.member if vehicle else None
+    classification = "Member" if member else "Visitor"
+
+    db_event_type = "Entry" if payload.event_type == "entry" else "Exit"
+    try:
+        event_ts = datetime.fromisoformat(payload.timestamp)
+    except ValueError:
+        event_ts = datetime.now()
+
+    log = EntryExitLog(
+        zone_id=zone.zone_id,
+        event_type=db_event_type,
+        plate_detected=plate,
+        confidence_score=payload.original_confidence,
+        event_timestamp=event_ts,
+        auth_method="Manual_Security",
+    )
+    db.add(log)
+
+    # parking_session is keyed by vehicle_id, so a session can only be tracked
+    # for plates that belong to a registered Vehicle (members). Unregistered
+    # visitor plates are still recorded in entry_exit_log above.
+    if vehicle is not None:
+        if payload.event_type == "entry":
+            db.add(ParkingSession(
+                vehicle_id=vehicle.vehicle_id,
+                zone_id=zone.zone_id,
+                entry_time=event_ts,
+                status="IN",
+            ))
+        else:
+            active_session = (
+                db.query(ParkingSession)
+                .filter(ParkingSession.vehicle_id == vehicle.vehicle_id, ParkingSession.status == "IN")
+                .order_by(ParkingSession.entry_time.desc())
+                .first()
+            )
+            if active_session:
+                active_session.status = "OUT"
+                active_session.exit_time = event_ts
+
+    db.commit()
+
+    return {
+        "recorded": True,
+        "plate": plate,
+        "classification": classification,
+        "member": member.to_member_dict() if member else None,
     }
 
 

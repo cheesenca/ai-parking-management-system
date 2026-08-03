@@ -10,10 +10,11 @@ from pathlib import Path
 
 from plate_utils import preprocess_plate, clean_plate_text, average_plate_readings
 from direction_detector import DirectionDetector
+from app.core.config import settings
 
 # Paths
-MODEL_DIR = Path(__file__).resolve().parents[3] / "models"
-DETECTOR_PATH = MODEL_DIR / "parkwise_detector.pt"
+MODEL_DIR = settings.MODELS_DIR
+DETECTOR_PATH = settings.OCR_MODEL_PATH
 
 # Constants 
 CONF_THRESHOLD  = 0.70   # minimum OCR confidence for auto-grant
@@ -38,7 +39,9 @@ class AIPSPipeline:
         if use_pretrained or not DETECTOR_PATH.exists():
             print("[AIPS]   YOLOv8 — using base pretrained model (no custom training yet)")
             print("[AIPS]   Train your model first, then set use_pretrained=False")
-            self.detector = YOLO("yolov8s.pt")
+
+            base_model_path = MODEL_DIR / "pytorch" / "yolov8s.pt"
+            self.detector = YOLO(str(base_model_path))
             self.has_plate_class = False
         else:
             print(f"[AIPS]   YOLOv8 — loading {DETECTOR_PATH}")

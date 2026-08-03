@@ -21,7 +21,7 @@ export default function CategoryStats({ slots }: { slots: any }) {
     <div className="card" style={{ padding: 24 }}> 
       <div className="card-title" style={{ marginBottom: 18, fontSize: 14 }}>Available Slots by Category</div>
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+      <div className="grid-3">
         {categories.map((cat) => {
           const info = slots.summary[cat] || { used: 0, total: 0, available: 0, rate_pct: 0 };
           return (

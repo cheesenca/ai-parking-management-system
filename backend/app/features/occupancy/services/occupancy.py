@@ -9,6 +9,7 @@ from app.core.config import settings
 
 CAPACITY_CONFIG_JSON = settings.SLOT_ROOT / "data" / "capacity_config.json" 
 
+
 def _bootstrap(f: str) -> None:
     """
     Bootstrap sys.path

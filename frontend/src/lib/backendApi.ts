@@ -1,4 +1,11 @@
-import type { AuthUser, Member, EntryLog, ZoneCapacity, ForecastDay, OccupancyPoint } from './types';
+import type { 
+  AuthUser, 
+  Member, 
+  EntryLog, 
+  ZoneCapacity, 
+  ForecastDay, 
+  OccupancyPoint, 
+} from './types';
 
 const BASE =
   typeof window !== 'undefined'
@@ -12,7 +19,11 @@ export function getToken(): string {
   if (typeof window === 'undefined') return '';
   return sessionStorage.getItem(TOKEN_KEY) || '';
 }
-export function setToken(token: string)  { sessionStorage.setItem(TOKEN_KEY, token); }
+
+export function setToken(token: string) { 
+  sessionStorage.setItem(TOKEN_KEY, token); 
+}
+
 export function clearSession() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
@@ -30,10 +41,24 @@ async function apiFetch<T>(
     ...(init.headers as Record<string, string> | undefined),
   };
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`);
+    const detail = (err as { detail?: unknown }).detail;
+    let message: string;
+
+    if (typeof detail === 'string' && detail) {
+      message = detail;
+    } else if (Array.isArray(detail)) {
+      message = detail.map(d => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join('; ');
+    } else if (detail && typeof detail === 'object') {
+      message = JSON.stringify(detail);
+    } else {
+      message = `HTTP ${res.status}`;
+    }
+    throw new Error(message);
   }
+
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;
 }
@@ -59,6 +84,7 @@ export async function apiLogin(
     { method: 'POST', body: JSON.stringify({ username, password }) },
     true,
   );
+
   setToken(data.access_token);
   return data.user;
 }
@@ -92,12 +118,19 @@ export async function apiGetMembers(params?: {
   zone?: string;
   category?: string;
   search?: string;
-}): Promise<Member[]> {
+  sort?: 'asc' | 'desc';
+  page?: number;
+  page_size?: number;
+}): Promise<{ items: Member[]; total: number; page: number; page_size: number }> {
   const q = new URLSearchParams();
   if (params?.zone && params.zone !== 'All') q.set('zone', params.zone);
   if (params?.category && params.category !== 'All') q.set('category', params.category);
   if (params?.search) q.set('search', params.search);
-  return apiFetch<Member[]>(`/api/v1/members?${q}`);
+  if (params?.sort) q.set('sort', params.sort);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.page_size) q.set('page_size', String(params.page_size));
+
+  return apiFetch(`/api/v1/members?${q}`);
 }
 
 export async function apiCreateMember(data: Omit<Member, 'member_id' | 'position' | 'last_in' | 'last_out'>): Promise<Member> {
@@ -139,6 +172,9 @@ export async function apiGetLiveSlots(zone: string) {
     total_capacity: number;
     total_occupied: number;
     total_available: number;
+    valid_sessions: number;
+    ghost_vehicles: number;
+    anomaly: boolean;
   }>(`/api/v1/slots/live?zone=${zone}`);
 }
 
@@ -160,7 +196,7 @@ export async function apiGetCalibrationSnapshot(zoneKey: string): Promise<{
   zone: string;
   width: number;
   height: number;
-  image: string; // base64 jpeg, no data: prefix
+  image: string; 
   default_slots: { id: string; category: string }[];
 }> {
   return apiFetch(`/api/v1/slots/calibration/${zoneKey}/snapshot`);
@@ -194,6 +230,24 @@ export async function apiUpdateZoneCapacity(
   return apiFetch(`/api/v1/slots/zones/${zoneKey}/capacity`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  });
+}
+
+export async function apiManualApprovePlate(payload: {
+  plate: string;
+  zone: string;
+  event_type: 'entry' | 'exit';
+  timestamp: string;
+  original_confidence?: number;
+}): Promise<{
+  recorded: boolean;
+  plate: string;
+  classification: 'Member' | 'Visitor';
+  member: Member | null;
+}> {
+  return apiFetch('/api/v1/ocr/manual-approve', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 
