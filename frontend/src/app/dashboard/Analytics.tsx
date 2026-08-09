@@ -8,7 +8,7 @@ import type { ZoneCapacity, ForecastDay } from '@/lib/types';
 import ForecastReportPrint from '@/components/ForecastReportPrint';
 
 export type ZoneKey = 'west' | 'east' | 'eastwest';
-type Granularity = 'daily' | 'weekly' | 'monthly' | 'semester' | 'yearly';
+type Granularity = 'daily' | 'weekly' | 'monthly';
 
 export const ZONE_KEYS: ZoneKey[] = ['west', 'east', 'eastwest'];
 export const ZONE_LABELS: Record<ZoneKey, string> = { west: 'West', east: 'East', eastwest: 'East & West' };
@@ -33,9 +33,6 @@ const statusClass: Record<string, string> = {
   Normal: 'status-normal', Warning: 'status-warning', Full: 'status-full',
 };
 
-// Local-time only, deliberately — no .toISOString() anywhere here. Mixing UTC-based
-// toISOString() with local-time Date parsing/arithmetic caused "tomorrow" to silently
-// round back down to "today" for any timezone ahead of UTC (e.g. WIB, UTC+7).
 export function toISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -52,8 +49,6 @@ const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
   { value: 'daily', label: 'Daily Forecast' },
   { value: 'weekly', label: 'Weekly Forecast' },
   { value: 'monthly', label: 'Monthly Forecast' },
-  { value: 'semester', label: 'Semester Forecast' },
-  { value: 'yearly', label: 'Yearly Forecast' },
 ];
 
 export default function AnalyticsPage() {
@@ -123,8 +118,6 @@ export default function AnalyticsPage() {
       case 'daily': return dailyRow ? [dailyRow] : [];
       case 'weekly': return weekRows;
       case 'monthly': return monthRows;
-      case 'semester': return merged.filter(r => r.date >= selectedDate && r.date <= addDays(selectedDate, 182));
-      case 'yearly': return merged.filter(r => r.date >= selectedDate && r.date <= addDays(selectedDate, 364));
     }
   }, [granularity, dailyRow, weekRows, monthRows, merged, selectedDate]);
 
@@ -144,26 +137,45 @@ export default function AnalyticsPage() {
   }));
 
   const trendData = useMemo(() => {
-    const bucketSpec: Record<Granularity, { size: number; count: number }> = {
-      daily: { size: 1, count: 7 },
-      weekly: { size: 7, count: 8 },
-      monthly: { size: 30, count: 12 },
-      semester: { size: 182, count: 4 },
-      yearly: { size: 365, count: 2 },
-    };
-    const { size, count } = bucketSpec[granularity];
-    const forward = merged.filter(r => r.date >= selectedDate);
-    const buckets: { date: string; demand: number }[] = [];
-    for (let i = 0; i < forward.length && buckets.length < count; i += size) {
-      const chunk = forward.slice(i, i + size);
-      // Only keep genuinely full periods — a trailing partial chunk (e.g. 1 leftover
-      // day of a 182-day semester bucket) would otherwise plot as a false "cliff"
-      // next to full-period sums.
-      if (chunk.length < size) break;
-      const demand = chunk.reduce((s, r) => s + (r.west?.demand ?? 0) + (r.east?.demand ?? 0), 0);
-      buckets.push({ date: chunk[0].date, demand });
+    if (granularity !== 'monthly') {
+      const bucketSpec: Record<'daily' | 'weekly', { size: number; count: number }> = {
+        daily: { size: 1, count: 7 },
+        weekly: { size: 7, count: 8 },
+      };
+      const { size, count } = bucketSpec[granularity];
+      const forward = merged.filter(r => r.date >= selectedDate);
+      const buckets: { date: string; demand: number }[] = [];
+      for (let i = 0; i < forward.length && buckets.length < count; i += size) {
+        const chunk = forward.slice(i, i + size);
+        if (chunk.length < size) break;
+        const demand = chunk.reduce((s, r) => s + (r.west?.demand ?? 0) + (r.east?.demand ?? 0), 0);
+        buckets.push({ date: chunk[0].date, demand });
+      }
+      return buckets;
     }
-    return buckets;
+
+    const forward = merged.filter(r => r.date >= selectedDate);
+    const byMonth = new Map<string, { date: string; demand: number; count: number }>();
+    for (const r of forward) {
+      const key = r.date.slice(0, 7); // "YYYY-MM"
+      const entry = byMonth.get(key) ?? { date: r.date, demand: 0, count: 0 };
+      entry.demand += (r.west?.demand ?? 0) + (r.east?.demand ?? 0);
+      entry.count += 1;
+      byMonth.set(key, entry);
+    }
+
+    let buckets = [...byMonth.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+    if (buckets.length > 1) {
+      const last = buckets[buckets.length - 1];
+      const [, monthEnd] = monthRange(last.date);
+      const daysInMonth = Number(monthEnd.slice(8, 10));
+      const startDay = Number(last.date.slice(8, 10));
+      const expectedCount = daysInMonth - startDay + 1;
+      if (last.count < expectedCount) buckets = buckets.slice(0, -1);
+    }
+
+    return buckets.slice(0, 12).map(({ date, demand }) => ({ date, demand }));
   }, [merged, granularity, selectedDate]);
 
   const year = new Date(`${selectedDate}T00:00:00`).getFullYear();
@@ -228,7 +240,7 @@ export default function AnalyticsPage() {
             <div className="kpi-value">{loading ? '—' : weekRows.length}</div>
             <div className="kpi-sub">Weekly forecast rows</div>
           </div>
-          <div className={`kpi-card${(granularity === 'monthly' || granularity === 'semester' || granularity === 'yearly') ? ' active-monthly' : ''}`}>
+          <div className={`kpi-card${granularity === 'monthly' ? ' active-monthly' : ''}`}>
             <div className="kpi-label">Monthly Records</div>
             <div className="kpi-value">{loading ? '—' : monthRows.length}</div>
             <div className="kpi-sub">Monthly forecast rows</div>
@@ -276,9 +288,24 @@ export default function AnalyticsPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={trendData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--k-border)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={d =>
+                        granularity === 'monthly'
+                          ? new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+                          : d.slice(5)
+                      }
+                    />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v) => [v, 'Predicted demand']} />
+                    <Tooltip
+                      formatter={(v) => [v, 'Predicted demand']}
+                      labelFormatter={d =>
+                        granularity === 'monthly'
+                          ? new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                          : d
+                      }
+                    />
                     <Area type="monotone" dataKey="demand" stroke="#E5002B" fill="#E5002B22" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -358,10 +385,6 @@ export default function AnalyticsPage() {
                         <td>{total.toLocaleString()}</td>
                         {ZONE_KEYS.map(z => {
                           const d = r[z];
-                          // Available slots from occupancy RATE (a real snapshot percentage),
-                          // not predicted_demand (a daily entry-count/flow metric that can
-                          // exceed capacity many times over via turnover — subtracting it from
-                          // capacity would not mean "available slots").
                           const avail = d ? Math.max(0, Math.round(capacityOf(z) * (1 - d.rate / 100))) : 0;
                           const st = d ? statusFor(d.rate) : 'Normal';
                           return (
@@ -401,7 +424,7 @@ export default function AnalyticsPage() {
               <div className="kdash-guide-grid">
                 <div className="kdash-guide-section">
                   <h3>Date &amp; Granularity</h3>
-                  <p>Pick a start date, then choose Daily, Weekly, Monthly, Semester, or Yearly to
+                  <p>Pick a start date, then choose Daily, Weekly, or Monthly to
                   change how the trend chart and KPI cards aggregate the forecast.</p>
                 </div>
                 <div className="kdash-guide-section">
@@ -419,9 +442,8 @@ export default function AnalyticsPage() {
                 </div>
               </div>
               <div className="kdash-guide-note">
-                Forecasts are generated by an ARIMA model retrained nightly on real entry/exit and
-                occupancy history. Longer horizons (Semester/Yearly) are naturally less precise than
-                Daily/Weekly, since the model has no seasonal component.
+                Forecasts are generated by a Prophet model retrained nightly on real entry/exit and
+                occupancy history. Monthly horizons are naturally less precise than Daily/Weekly.
               </div>
             </div>
           </div>

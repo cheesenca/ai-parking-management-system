@@ -172,9 +172,7 @@ export async function apiGetLiveSlots(zone: string) {
     total_capacity: number;
     total_occupied: number;
     total_available: number;
-    valid_sessions: number;
-    ghost_vehicles: number;
-    anomaly: boolean;
+    overall_rate_pct: number;
   }>(`/api/v1/slots/live?zone=${zone}`);
 }
 

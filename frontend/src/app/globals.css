@@ -295,8 +295,8 @@ html, body {
    the risk-alert being conditionally rendered no longer matters since flex
    (unlike grid-template-rows) doesn't depend on a fixed child position/count. */
 @media (min-width: 1201px) {
-  .kdash .dashboard { height: calc(100vh - 56px); min-height: 0; }
-  .kdash .main-content { grid-template-rows: 1fr 1fr; min-height: 0; }
+  .kdash .dashboard { height: auto; min-height: 0; }
+  .kdash .main-content { grid-template-rows: auto auto; min-height: 0; }
   .kdash .upper-grid, .kdash .lower-grid { min-height: 0; }
   .kdash .card { display: flex; flex-direction: column; min-height: 0; }
   .kdash .card-header { flex: 0 0 auto; }
@@ -365,6 +365,7 @@ html, body {
 .kdash .main-content { display: grid; grid-template-rows: auto auto; gap: 11px; }
 .kdash .upper-grid { display: grid; grid-template-columns: 50% 23% 27%; gap: 11px; }
 .kdash .lower-grid { display: grid; grid-template-columns: 32% 68%; gap: 11px; }
+.kdash .lower-grid .card { display: flex; flex-direction: column; }
 .kdash .card { background: var(--k-card); border: 1px solid var(--k-border); border-radius: 13px; box-shadow: var(--k-shadow); padding: 12px 13px; overflow: hidden; }
 .kdash .card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; height: 22px; }
 .kdash .card-title { margin: 0; color: var(--k-ink); font-size: .86rem; font-weight: 850; line-height: 1.1; }
@@ -379,7 +380,13 @@ html, body {
 .kdash .dot { width: 8px; height: 8px; border-radius: 50%; }
 .kdash .legend-item strong { color: var(--k-ink); font-size: .74rem; }
 
-.kdash .insight-list { display: grid; gap: 12px; align-content: center; height: 220px; }
+.kdash .insight-list { 
+  display: grid; 
+  padding-top: 18px;
+  gap: 12px; 
+  align-content: start; 
+  height: auto; 
+}
 .kdash .insight-item { display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 10px; align-items: center; }
 .kdash .insight-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(16,24,40,.05); }
 .kdash .insight-icon svg { width: 22px; height: 22px; }
@@ -390,7 +397,13 @@ html, body {
 .kdash .insight-text span { display: block; color: var(--k-muted); font-size: .68rem; line-height: 1.28; }
 
 .kdash .area-card .chart-area { height: 240px; }
-.kdash .preview-table-wrap { height: 240px; border: 1px solid var(--k-border); border-radius: 9px; overflow: auto; }
+.kdash .preview-table-wrap { 
+  flex: 1; 
+  min-height: 0; 
+  border: 1px solid var(--k-border); 
+  border-radius: 9px; 
+  overflow: auto; 
+}
 .kdash table { width: 100%; border-collapse: collapse; }
 .kdash th, .kdash td { border-bottom: 1px solid var(--k-border); text-align: left; white-space: nowrap; }
 .kdash th { background: #FAFAFB; color: var(--k-ink); font-weight: 850; font-size: .58rem; padding: 6px 6px; position: sticky; top: 0; }

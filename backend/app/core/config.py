@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     PROPHET_RETRAIN_ENABLED: bool = os.getenv("PROPHET_RETRAIN_ENABLED", "true").lower() == "true"
     PROPHET_RETRAIN_HOUR: int = int(os.getenv("PROPHET_RETRAIN_HOUR", "2"))
     PROPHET_RETRAIN_MINUTE: int = int(os.getenv("PROPHET_RETRAIN_MINUTE", "0"))
+    PROPHET_FORECAST_HORIZON_DAYS: int = int(os.getenv("PROPHET_FORECAST_HORIZON_DAYS", "30"))
 
     # Database & Network
     DATABASE_URL: str = os.getenv(

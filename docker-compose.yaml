@@ -1,4 +1,23 @@
 services:
+  db:
+    image: mysql:8.0
+    container_name: aips_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: aips_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./backend/seeds:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   backend:
     build:
       context: ./backend
@@ -8,20 +27,23 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: mysql+pymysql://root:@host.docker.internal:3306/aips_db
+      DATABASE_URL: mysql+pymysql://root:@db:3306/aips_db
       BACKEND_URL: http://backend:8000
       YOLO_CONF: "0.50"
       IOU_THRESHOLD: "0.30"
     volumes:
       - ./backend/models:/backend/models
       - ./backend/logs:/backend/logs
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 30s
- 
+      retries: 8
+      start_period: 60s
+
   frontend:
     build:
       context: ./frontend
@@ -37,3 +59,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  db_data:

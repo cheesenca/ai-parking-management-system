@@ -7,7 +7,6 @@ from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
 from app.features.forecast.services.model import forecast_next_days
 from app.features.forecast.report import build_report
-from app.features.forecast.live_comparison import build_live_comparison
 from app.features.forecast.models import (
     AREA_CODES,
     AREA_PLANT_MAP,
@@ -198,9 +197,6 @@ def get_predictive_dashboard(
         ]
     preview = [_daily_to_dict(r) for r in window]
 
-    # Build the live comparison data for the selected day
-    live_comparison = build_live_comparison(db, selected, selected.ds)
-
     return {
         "selected_date": selected.ds.isoformat(),
         "location": location,
@@ -219,30 +215,7 @@ def get_predictive_dashboard(
         "trend": trend,
         "forecast_preview": preview,
         "plant_mapping": AREA_PLANT_MAP,
-        "live_comparison": live_comparison,
     }
-
-
-# GET /api/forecast/predictive/live-comparison
-@router.get("/predictive/live-comparison")
-def get_live_comparison(
-    date_: str | None = Query(default=None, alias="date", description="Selected day, YYYY-MM-DD"),
-    db: Session = Depends(get_db),
-):
-    """
-    Retrieve the live comparison data for a specific day, showing the predicted vs actual parking demand and occupancy rates
-    """
-    daily_rows = query_daily_rows(db)
-    if not daily_rows:
-        raise HTTPException(status_code=503, detail="Forecast data not seeded yet, run seed_forecast.py")
-    selected = daily_rows[0]
-    if date_:
-        try:
-            target = datetime.strptime(date_, "%Y-%m-%d").date()
-            selected = next((r for r in daily_rows if r.ds == target), daily_rows[0])
-        except ValueError:
-            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
-    return build_live_comparison(db, selected, selected.ds)
 
 
 # GET /api/forecast/predictive/report
