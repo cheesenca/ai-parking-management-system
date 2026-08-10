@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
 import { useLiveDetection, useSlotOccupancy, useSlotDetection, CAMERA_INDEX_BY_ZONE } from '@/lib/api';
-import { Wifi, WifiOff, Cpu, Settings, AlertTriangle } from 'lucide-react';
+import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
 import SlotDetectionCamera from '@/components/SlotDetectionCamera';
@@ -24,7 +24,7 @@ export default function TrackerPage() {
   // const lpr = useLiveDetection({ cameraIndex: 0, enabled: true });
   const lpr = useLiveDetection({ cameraIndex: 0, enabled: false });
   const slots = useSlotOccupancy(selectedZone);
-  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: true });
+  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: 0, enabled: true });
   // const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: false });
   const [latestIn, setLatestIn] = useState('—');
   const [latestOut, setLatestOut] = useState('—');
@@ -47,18 +47,6 @@ export default function TrackerPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ConnPill label="LPR CAMERA" state={lpr.conn} icon={lpr.conn === 'live' ? Wifi : WifiOff} />
           <ConnPill label="SLOT SCANNER" state={slots.conn} icon={Cpu} />
-          {slots.isAnomaly && (
-            <span
-              title={`${slots.ghostVehicles} occupied slot(s) with no matching validated entry`}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8,
-                background: 'var(--warn-bg)', border: '1px solid #FDE68A', color: 'var(--warn-text)',
-                fontSize: 11, fontWeight: 700,
-              }}
-            >
-              <AlertTriangle size={13} /> {slots.ghostVehicles} UNVERIFIED
-            </span>
-          )}
         </div>
       </div>
 

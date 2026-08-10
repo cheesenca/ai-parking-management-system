@@ -17,9 +17,9 @@ import torch
 
 from app.core.config import settings
 from app.core.database import get_db, SessionLocal
-from app.core.models import EntryExitLog, OccupancySnapshot, ParkingSlot, ParkingZone, ParkingSession
-from app.features.occupancy.schemas.slots import CategoryInfo, DetectionEvent, ZoneUpdate, CapacityUpdate
-from app.features.occupancy.services.occupancy import SlotSmoother
+from app.core.models import EntryExitLog, OccupancySnapshot, ParkingSlot, ParkingZone
+from app.features.occupancy.schemas.slots import CategoryInfo, ZoneUpdate, CapacityUpdate
+from app.features.occupancy.services.occupancy import SlotSmoother, compute_iou
 from app.features.auth.endpoints import get_current_user
 from app.features.ocr.pipeline.plate_utils import normalize_plate, is_valid_plate_format
 from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
@@ -69,7 +69,10 @@ def _build_layout(prefix: str) -> list[dict]:
         layout.append({"id": f"{prefix}4-{c}", "category": "Visitor"})
     return layout
 
-SLOT_LAYOUTS: dict[str, list[dict]] = {"west": _build_layout("W"), "east": _build_layout("E")}
+SLOT_LAYOUTS: dict[str, list[dict]] = {
+    "west": _build_layout("W"), 
+    "east": _build_layout("E"),
+}
 SLOT_LAYOUTS["eastwest"] = SLOT_LAYOUTS["west"] + SLOT_LAYOUTS["east"]
 
 ZONE_CAMERA_DEVICE: dict[str, str] = {
@@ -87,6 +90,8 @@ COLOR_OCC = (30, 60, 220)
 
 CALIBRATION_DIR = Path(__file__).resolve().parent.parent / "data" / "calibration"
 CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+
+IOU_MATCH_THRESHOLD = 0.10
 
 
 def _load_reference_thumb(zone_key: str):
@@ -204,36 +209,31 @@ def _save_calibration(zone_key: str, slots: List[dict]) -> None:
     )
 
 
-def _point_in_polygon(x: float, y: float, polygon: List[List[float]]) -> bool:
-    """
-    Standard ray-casting point-in-polygon test
-    """
-    inside = False
-    n = len(polygon)
-    j = n - 1
-    for i in range(n):
-        xi, yi = polygon[i]
-        xj, yj = polygon[j]
-        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-9) + xi):
-            inside = not inside
-        j = i
-    return inside
-
-
 def _map_to_slots_calibrated(dets: List[dict], calibration: List[dict]) -> Dict[str, str]:
     """
-    Assign each detection to the fixed slot polygon its box-center falls inside
+    Maps detected bounding boxes to calibrated parking slots based on Intersection over Union (IoU)
     """
     status = {s["id"]: "Available" for s in calibration}
-    best_conf: Dict[str, float] = {}
+    best_iou_for_slot: Dict[str, float] = {}
+
     for d in dets:
-        cx, cy = (d["x1"] + d["x2"]) / 2, (d["y1"] + d["y2"]) / 2
+        bbox = [d["x1"], d["y1"], d["x2"], d["y2"]]
+
+        best_slot_id = None
+        best_iou = 0.0
         for s in calibration:
-            if _point_in_polygon(cx, cy, s["polygon"]):
-                if d["conf"] > best_conf.get(s["id"], -1.0):
-                    best_conf[s["id"]] = d["conf"]
-                    status[s["id"]] = d["label"]
-                break
+            iou = compute_iou(s["polygon"], bbox)
+            if iou > best_iou:
+                best_iou = iou
+                best_slot_id = s["id"]
+
+        if best_slot_id is None or best_iou < IOU_MATCH_THRESHOLD:
+            continue
+
+        if best_iou > best_iou_for_slot.get(best_slot_id, -1.0):
+            best_iou_for_slot[best_slot_id] = best_iou
+            status[best_slot_id] = d["label"]
+
     return status
 
 
@@ -592,16 +592,6 @@ def get_live_slots(
 
     dashboard = parking_zone.to_dashboard_dict()
     total_occupied = dashboard["total_occupied"]
-    
-    valid_sessions_count = db.query(ParkingSession).filter(
-        ParkingSession.zone_id == parking_zone.zone_id,
-        ParkingSession.status == "IN"
-    ).count()
-    ghost_count = max(0, total_occupied - valid_sessions_count)
-    is_anomaly = ghost_count > 0
-
-    if is_anomaly:
-        logger.warning(f"Zone {zone}: Detection of {ghost_count} unidentified vehicles/vehicles that bypassed OCR in the parking area!")
 
     return {
         "zone": zone,
@@ -615,9 +605,6 @@ def get_live_slots(
         "total_occupied": total_occupied,
         "total_available": dashboard["total_available"],
         "overall_rate_pct": dashboard["overall_rate_pct"],
-        "valid_sessions": valid_sessions_count,
-        "ghost_vehicles": ghost_count,
-        "anomaly": is_anomaly,
     }
 
 
@@ -866,7 +853,7 @@ def update_parking_slots(
     return {"message": "Slots updated successfully", "zone": payload.zone}
 
 
-# POST /api/slots/detection 
+# POST /api/slots/detection
 @router.post("/detection")
 def record_detection(
     event: DetectionEvent, 

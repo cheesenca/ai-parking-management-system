@@ -102,18 +102,12 @@ def run_migrations() -> None:
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS predicted_visitor INT NOT NULL DEFAULT 0",
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
 
-        # Analytics Data - Predictive Analytics (forecast) support.
-        # These columns let daily/weekly/monthly forecast rows (one per
-        # area code P1W..P3E) live inside the existing analytics_data
-        # table instead of requiring 3 extra tables.
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS period_type VARCHAR(10) NOT NULL DEFAULT 'daily'",
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS area_code VARCHAR(10) NULL",
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS period_label VARCHAR(20) NULL",
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS predicted_available INT NULL",
         "ALTER TABLE analytics_data ADD COLUMN IF NOT EXISTS status VARCHAR(10) NULL DEFAULT 'Normal'",
-        # The old unique key only allowed one row per (zone_id, record_date);
-        # forecast rows need multiple rows per date (one per area), so widen
-        # it to include period_type/area_code. Safe no-op if already applied.
+
         "ALTER TABLE analytics_data DROP INDEX uq_analytics_zone_date",
         "ALTER TABLE analytics_data ADD UNIQUE KEY uq_analytics_zone_date_area (zone_id, record_date, period_type, area_code)",
 

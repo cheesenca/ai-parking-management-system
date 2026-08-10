@@ -1,3 +1,4 @@
+
 import logging
 import joblib
 from app.core.config import settings
@@ -50,7 +51,7 @@ def _load_model():
     return _prophet_models
  
  
-def forecast_next_days(periods: int = 30) -> list[dict]:
+def forecast_next_days(periods: int = 30, zone: str | None = None) -> list[dict]:
     """
     Forecast the next `periods` days of parking demand using the Prophet model
     """

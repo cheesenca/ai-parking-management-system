@@ -37,15 +37,4 @@ class CapacityUpdate(BaseModel):
     employee_capacity: Optional[int] = Field(default=None, ge=0)
     vendor_capacity: Optional[int] = Field(default=None, ge=0)
     visitor_capacity: Optional[int] = Field(default=None, ge=0)
-
-
-class DetectionEvent(BaseModel):
-    """
-    Pushed once per vehicle detection by pipeline
-    """
-    zone: str
-    timestamp: str
-    plate: str
-    confidence: float          
-    status: str = "Occupied"  
     

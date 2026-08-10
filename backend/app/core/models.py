@@ -322,16 +322,7 @@ class OccupancySnapshot(Base):
 
 class AnalyticsData(Base):
     """
-    Holds BOTH the original per-zone/per-day analytics rows (legacy
-    Analytics dashboard, `area_code` / `period_type` left at their
-    defaults) AND the Predictive Analytics forecast rows (daily / weekly
-    / monthly, one row per area code e.g. P1W..P3E).
-
-    Reusing this single table (instead of three extra `daily_forecast`,
-    `weekly_forecast`, `monthly_forecast` tables) keeps the schema at the
-    original 9 tables — only a handful of nullable columns were added.
-    See `app/features/forecast/models.py` for how forecast rows are
-    grouped back into daily/weekly/monthly "records" for the API.
+    Represents the analytics data for a parking zone, including occupancy rates, predicted demand, and other relevant metrics
     """
     __tablename__ = "analytics_data"
     __table_args__ = (

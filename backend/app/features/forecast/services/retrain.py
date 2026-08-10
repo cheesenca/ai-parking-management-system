@@ -25,6 +25,10 @@ DEFAULT_PEAK_START = dtime(8, 0)
 DEFAULT_PEAK_END = dtime(9, 0)
 
 PROPHET_ZONE_KEYS = ["west", "east"]
+AREA_ZONE_MAP = {
+    "P1W": "west", "P2W": "west", "P3W": "west",
+    "P1E": "east", "P2E": "east", "P3E": "east",
+}
 
 
 class ZoneRetrainResult(TypedDict):
@@ -445,6 +449,7 @@ def _validate_candidate(series: pd.Series, zone_key: str, existing_models: dict)
         except Exception as exc:
             logger.warning("Could not evaluate previous model for zone '%s': %s", zone_key, exc)
 
+    metrics["reason"] = "passed_validation"
     return True, metrics
 
 
@@ -513,6 +518,67 @@ def retrain_all_zones() -> dict[str, dict]:
         from app.features.forecast.services import model as model_service
         model_service.reset_cache()
 
+        try:
+            sync_forecast_to_analytics_data(db, zone_ids, horizon_days=settings.PROPHET_FORECAST_HORIZON_DAYS)
+        except Exception as exc:
+            logger.exception("Failed to sync forecast into analytics_data: %s", exc)
+
         return results
     finally:
         db.close()
+
+
+def sync_forecast_to_analytics_data(db, zone_ids: dict[str, int], horizon_days: int = 30) -> None:
+    """
+    Syncs the Prophet forecast into the analytics_data table for all zones and areas
+    """
+    from app.features.forecast.services.model import forecast_next_days
+
+    today = date.today()
+
+    for area, zone_key in AREA_ZONE_MAP.items():
+        zone_id = zone_ids.get(zone_key)
+        if zone_id is None:
+            continue
+
+        try:
+            forecast_rows = forecast_next_days(periods=horizon_days, zone=zone_key)
+        except (FileNotFoundError, KeyError) as exc:
+            logger.warning("Skipping analytics_data sync for zone '%s': %s", zone_key, exc)
+            continue
+
+        for row in forecast_rows:
+            record_date = today + timedelta(days=row["step"])
+            predicted_demand = max(0, round(row["predicted_demand"] / 3))
+
+            existing = (
+                db.query(AnalyticsData)
+                .filter_by(zone_id=zone_id, record_date=record_date, period_type="daily", area_code=area)
+                .first()
+            )
+            if existing is None:
+                existing = AnalyticsData(
+                    zone_id=zone_id,
+                    record_date=record_date,
+                    period_type="daily",
+                    area_code=area,
+                    peak_hour_start="08:00:00",
+                    peak_hour_end="17:00:00",
+                    avg_occupancy_rate=0.0,
+                    predicted_employee=0,
+                    predicted_vendor=0,
+                    predicted_visitor=0,
+                )
+                db.add(existing)
+
+            existing.predicted_demand = predicted_demand
+            existing.predicted_available = max(0, 300 - predicted_demand)
+            existing.status = (
+                "Full" if predicted_demand >= 300
+                else "Warning" if predicted_demand >= 240
+                else "Normal"
+            )
+
+        db.commit()
+
+    logger.info("Synced Prophet forecast into analytics_data for %d areas, %d days ahead", len(AREA_ZONE_MAP), horizon_days)
