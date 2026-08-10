@@ -164,11 +164,11 @@ export default function CalibrationPage() {
 
   const finishSlot = () => {
     if (currentPoints.length < 3) {
-      setError('Klik minimal 3 titik untuk membentuk area slot.');
+      setError('Click at least 3 points to form the slot area.');
       return;
     }
     if (!selectedSlotId) {
-      setError('Pilih Slot ID terlebih dahulu.');
+      setError('Please select a Slot ID first.');
       return;
     }
     setError(null);
@@ -193,7 +193,7 @@ export default function CalibrationPage() {
 
   const handleSave = async () => {
     if (!slots.length) {
-      setError('Belum ada slot yang dikalibrasi.');
+      setError('No slots have been calibrated yet.');
       return;
     }
     setSaving(true);
@@ -220,9 +220,9 @@ export default function CalibrationPage() {
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>Slot Calibration</h1>
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-          Klik titik-titik sudut area parkir langsung di atas gambar kamera untuk menetapkan lokasi tiap slot secara tetap.
-          Ini menghilangkan "goyang"-nya identitas slot pada deteksi live, karena slot tidak lagi ditentukan dari urutan
-          deteksi tiap frame, melainkan dari koordinat tetap ini.
+          Click the corner points of each parking slot directly on the camera image to fix its location permanently.
+          This eliminates identity "jitter" between slots in live detection, because slots are no longer determined
+          by the detection order of each frame, but by these fixed coordinates.
         </p>
       </div>
 
@@ -256,8 +256,8 @@ export default function CalibrationPage() {
 
           {source === 'upload' && (
             <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)' }}>
-              Foto diunggah manual ({imgSize.width}×{imgSize.height}px). Pastikan foto ini diambil dari sudut &amp; posisi kamera yang <b>persis sama</b> dengan feed live —
-              kalau sudut/kroping berbeda, koordinat slot tidak akan pas dengan deteksi live nantinya.
+              Manually uploaded photo ({imgSize.width}×{imgSize.height}px). Make sure this photo was taken from the <b>exact same</b> camera
+              angle &amp; position as the live feed — if the angle/cropping differs, the slot coordinates won't align with live detections.
             </div>
           )}
 
@@ -269,19 +269,19 @@ export default function CalibrationPage() {
             />
           ) : (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }}>
-              {loading ? 'Mengambil gambar dari kamera…' : 'Belum ada gambar. Klik Camera Snapshot atau Upload Photo.'}
+              {loading ? 'Fetching image from camera…' : 'No image yet. Click Camera Snapshot or Upload Photo.'}
             </div>
           )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button className="btn-secondary" onClick={undoPoint} disabled={!currentPoints.length}>
-              <RotateCcw size={14} /> Undo Titik
+              <RotateCcw size={14} /> Undo Point
             </button>
             <button className="btn-secondary" onClick={clearCurrent} disabled={!currentPoints.length}>
-              <Trash2 size={14} /> Bersihkan
+              <Trash2 size={14} /> Clear
             </button>
             <button className="btn-primary" onClick={finishSlot} disabled={currentPoints.length < 3}>
-              Simpan Area Slot ({currentPoints.length} titik)
+              Save Slot Area ({currentPoints.length} points)
             </button>
           </div>
         </div>
@@ -289,7 +289,7 @@ export default function CalibrationPage() {
         {/* Controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="card" style={{ padding: 18 }}>
-            <div className="label" style={{ marginBottom: 10 }}>Slot yang sedang digambar</div>
+            <div className="label" style={{ marginBottom: 10 }}>Slot currently being drawn</div>
             <select
               value={selectedSlotId}
               onChange={e => {
@@ -315,13 +315,13 @@ export default function CalibrationPage() {
               <option value="Visitor">Visitor</option>
             </select>
             <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 10 }}>
-              Klik 3–4 titik sudut slot ini di gambar, lalu tekan "Simpan Area Slot".
+              Click 3–4 corner points of this slot on the image, then press "Save Slot Area".
             </p>
           </div>
 
           <div className="card" style={{ padding: 18 }}>
             <div className="label" style={{ marginBottom: 8 }}>
-              Progress: {slots.length} / {defaultSlots.length} slot
+              Progress: {slots.length} / {defaultSlots.length} slots
             </div>
             <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
               {slots.map(s => (
@@ -332,11 +332,11 @@ export default function CalibrationPage() {
                   </button>
                 </div>
               ))}
-              {!slots.length && <div style={{ fontSize: 12, color: 'var(--muted)' }}>Belum ada slot dikalibrasi.</div>}
+              {!slots.length && <div style={{ fontSize: 12, color: 'var(--muted)' }}>No slots calibrated yet.</div>}
             </div>
             {remaining.length > 0 && (
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
-                Sisa: {remaining.length} slot belum dikalibrasi.
+                Remaining: {remaining.length} slot(s) not yet calibrated.
               </p>
             )}
           </div>
@@ -350,7 +350,7 @@ export default function CalibrationPage() {
             disabled={saving || !slots.length}
           >
             {saving ? <Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> : saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
-            {saving ? 'Menyimpan…' : saved ? 'Tersimpan' : 'Simpan Semua Kalibrasi'}
+            {saving ? 'Saving…' : saved ? 'Saved' : 'Save All Calibration'}
           </button>
         </div>
       </div>
