@@ -6,6 +6,31 @@ echo   AIPS - Starting full stack
 echo ============================================
 echo.
 
+REM --- Choose which camera features to enable ---
+echo  Which features do you want to run?
+echo    [1] Full stack  (LPR + Slot Occupancy)
+echo    [2] LPR only    (no slot occupancy webcam yet)
+echo    [3] Slot Occupancy only  (no LPR webcam yet)
+echo.
+set "FEATURE_CHOICE="
+set /p FEATURE_CHOICE=Choice [1/2/3, default 1]:
+if "%FEATURE_CHOICE%"=="2" (
+    set NEXT_PUBLIC_ENABLE_LPR=true
+    set NEXT_PUBLIC_ENABLE_OCCUPANCY=false
+) else if "%FEATURE_CHOICE%"=="3" (
+    set NEXT_PUBLIC_ENABLE_LPR=false
+    set NEXT_PUBLIC_ENABLE_OCCUPANCY=true
+) else (
+    set NEXT_PUBLIC_ENABLE_LPR=true
+    set NEXT_PUBLIC_ENABLE_OCCUPANCY=true
+)
+echo.
+echo  LPR: %NEXT_PUBLIC_ENABLE_LPR%   Slot Occupancy: %NEXT_PUBLIC_ENABLE_OCCUPANCY%
+echo  (The backend and its APIs always start normally - this only turns the
+echo   dashboard's camera websockets on/off, so a missing webcam for one
+echo   feature won't spam reconnect attempts while you test the other.)
+echo.
+
 REM --- Check / start MySQL (XAMPP) ---
 netstat -ano | findstr ":3306" >nul
 if errorlevel 1 (

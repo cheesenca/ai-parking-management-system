@@ -54,6 +54,10 @@ runs/
 # Local databases / generated artifacts
 *.db
 
+# Captured plate images awaiting manual review — real vehicle/plate photos,
+# not source, and shouldn't be versioned (see root .gitignore precedent).
+app/features/ocr/data/pending_captures/
+
 # Pretrained weights EasyOCR/Ultralytics auto-download on first run — not
 # custom-trained for this project, no need to version them (they're large).
 *.pth

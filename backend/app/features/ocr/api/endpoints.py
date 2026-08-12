@@ -13,11 +13,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
 from plate_utils import normalize_plate, is_valid_plate_format
 
-from app.core.models import EntryExitLog, ParkingZone
+from app.core.database import get_db, SessionLocal
+from app.core.models import EntryExitLog, ParkingZone, PendingPlateReview
 from app.features.auth.endpoints import get_current_user
 from app.features.ocr.schemas.detection import ManualApprovalRequest
 from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
 from app.features.ocr.services.session_tracking import record_entry, record_exit
+from app.features.ocr.services.review_queue import queue_for_review
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +181,7 @@ def manual_approve_detection(
     except ValueError:
         event_ts = datetime.now()
 
-    db.add(EntryExitLog(
+    log = EntryExitLog(
         zone_id=zone.zone_id,
         admin_id=current_user.admin_id,
         event_type="Entry" if payload.event_type == "entry" else "Exit",
@@ -187,12 +189,26 @@ def manual_approve_detection(
         confidence_score=payload.original_confidence,
         event_timestamp=event_ts,
         auth_method="Manual_Security",
-    ))
+    )
+    db.add(log)
+    db.flush()  # populate log.log_id without committing yet
 
     if payload.event_type == "entry":
         record_entry(db, vehicle.vehicle_id, zone.zone_id, event_ts)
     else:
         record_exit(db, vehicle.vehicle_id, event_ts)
+
+    # Resolve the persisted queue row this approval came from, if any, so it
+    # stops showing up in the Pending Review list.
+    if payload.review_id is not None:
+        review = db.query(PendingPlateReview).filter(
+            PendingPlateReview.review_id == payload.review_id
+        ).first()
+        if review is not None:
+            review.status = 'reviewed'
+            review.resolved_by = current_user.admin_id
+            review.resolved_at = datetime.now()
+            review.resulting_log_id = log.log_id
 
     db.commit()
 
@@ -202,6 +218,74 @@ def manual_approve_detection(
         "classification": "Member" if member_dict else "Visitor",
         "member": member_dict,
     }
+
+
+# GET /api/v1/ocr/pending-reviews
+@router.get("/pending-reviews")
+def list_pending_reviews(
+    zone: str | None = Query(default=None),
+    status: str = Query(default="needs_review"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Paginated backlog of detections still needing a human decision
+    (status='needs_review' by default — pass status='queued' to see ones the
+    background sweep hasn't gotten to yet, or status='all' for everything).
+    """
+    q = db.query(PendingPlateReview).join(ParkingZone, PendingPlateReview.zone_id == ParkingZone.zone_id)
+    if status != "all":
+        q = q.filter(PendingPlateReview.status == status)
+    if zone:
+        q = q.filter(ParkingZone.zone_key == zone)
+    elif current_user.role == "Security" and current_user.location:
+        q = q.filter(ParkingZone.zone_key == current_user.location)
+
+    total = q.count()
+    rows = (
+        q.order_by(PendingPlateReview.captured_at.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = []
+    for row in rows:
+        image_b64 = None
+        paths = row.image_paths or []
+        if paths:
+            try:
+                image_b64 = base64.b64encode(Path(paths[-1]).read_bytes()).decode('utf-8')
+            except OSError:
+                image_b64 = None
+        items.append(row.to_review_dict(zone_key=row.zone.zone_key, image_base64=image_b64))
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+# POST /api/v1/ocr/pending-reviews/{review_id}/dismiss
+@router.post("/pending-reviews/{review_id}/dismiss")
+def dismiss_pending_review(
+    review_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Explicit reject-without-recording. Keeps the row (status='dismissed')
+    for audit instead of deleting it.
+    """
+    review = db.query(PendingPlateReview).filter(PendingPlateReview.review_id == review_id).first()
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    review.status = 'dismissed'
+    review.resolved_by = current_user.admin_id
+    review.resolved_at = datetime.now()
+    db.commit()
+
+    return {"dismissed": True, "review_id": review_id}
 
 
 # WebSocket endpoint (WebSocket)
@@ -254,6 +338,11 @@ async def camera_feed(
             _, buf   = cv2.imencode('.jpg', output['frame'], [cv2.IMWRITE_JPEG_QUALITY, 70])
             frame_b64 = base64.b64encode(buf).decode('utf-8')
 
+            # Pull the buffered crops out before anything touches JSON
+            # serialization — raw numpy arrays can't go over the wire, and
+            # are only needed here for queue_for_review below.
+            event_crops = [ev.pop('crops', []) for ev in output['events']]
+
             # Build payload
             payload = {
                 "frame":    frame_b64,
@@ -265,6 +354,16 @@ async def camera_feed(
             if output['events']:
                 ev = output['events'][0]   # take first event per frame
                 member = _lookup_member_for_display(normalize_plate(ev['plate'])) if ev.get('plate') else None
+
+                review_id = None
+                if ev.get('status') != 'detected':
+                    # Persist immediately so this detection is never lost,
+                    # even if no one is watching the live dashboard right
+                    # now. A background sweep (services/review_queue.py)
+                    # attempts to auto-resolve it; anything still unresolved
+                    # surfaces in the Pending Review list.
+                    review_id = queue_for_review({**ev, 'crops': event_crops[0]}, zone)
+
                 payload["detection"] = {
                     "plate_detected": ev['plate'],
                     "confidence": ev['confidence'],
@@ -273,6 +372,7 @@ async def camera_feed(
                     "timestamp": ev['timestamp'],
                     "status": ev['status'],
                     "member": member,
+                    "review_id": review_id,
                 }
 
                 # Persist confirmed crossing events (skip low-confidence/no-plate noise)

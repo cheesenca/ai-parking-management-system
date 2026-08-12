@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import type { Zone } from '@/lib/types';
-import { useLiveDetection, useSlotOccupancy, useSlotDetection, CAMERA_INDEX_BY_ZONE } from '@/lib/api';
+import { useLiveDetection, useSlotOccupancy, useSlotDetection } from '@/lib/api';
 import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
@@ -17,15 +17,20 @@ const zoneOptions: { value: Zone; label: string }[] = [
   { value: 'east', label: 'East Plant' },
 ];
 
+// Set by start.bat's feature menu so a teammate without the slot-occupancy
+// webcam yet can run LPR alone (and vice versa) without a dead camera feed
+// retrying in the background. Defaults to enabled when unset, e.g. `npm run
+// dev` outside start.bat.
+const LPR_ENABLED = process.env.NEXT_PUBLIC_ENABLE_LPR !== 'false';
+const OCCUPANCY_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OCCUPANCY !== 'false';
+
 export default function TrackerPage() {
   const { user } = useAuth();
   const defaultZone = (user?.location ?? 'west') as Zone;
   const [selectedZone, setSelectedZone] = useState<Zone>(defaultZone);
-  // const lpr = useLiveDetection({ cameraIndex: 0, enabled: true });
-  const lpr = useLiveDetection({ cameraIndex: 0, enabled: false });
+  const lpr = useLiveDetection({ cameraIndex: 0, enabled: LPR_ENABLED });
   const slots = useSlotOccupancy(selectedZone);
-  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: 0, enabled: true });
-  // const slotDetection = useSlotDetection(selectedZone, { cameraIndex: CAMERA_INDEX_BY_ZONE[selectedZone], enabled: false });
+  const slotDetection = useSlotDetection(selectedZone, { cameraIndex: 1, enabled: OCCUPANCY_ENABLED });
   const [latestIn, setLatestIn] = useState('—');
   const [latestOut, setLatestOut] = useState('—');
   const [capacityModalOpen, setCapacityModalOpen] = useState(false);

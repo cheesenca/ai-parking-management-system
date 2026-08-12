@@ -213,6 +213,28 @@ INSERT INTO `parking_zone` (`zone_id`, `zone_key`, `zone_name`, `total_capacity`
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `pending_plate_review`
+--
+
+CREATE TABLE `pending_plate_review` (
+  `review_id` bigint(20) NOT NULL,
+  `zone_id` bigint(20) NOT NULL,
+  `track_id` int(11) DEFAULT NULL,
+  `plate_guess` varchar(20) DEFAULT NULL,
+  `confidence` float DEFAULT NULL,
+  `vehicle_type` varchar(50) DEFAULT NULL,
+  `event_type` enum('entry','exit') NOT NULL,
+  `image_paths` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`image_paths`)),
+  `status` varchar(20) NOT NULL DEFAULT 'queued',
+  `captured_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `resolved_at` datetime DEFAULT NULL,
+  `resolved_by` bigint(20) DEFAULT NULL,
+  `resulting_log_id` bigint(20) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `vehicle`
 --
 
@@ -317,6 +339,17 @@ ALTER TABLE `parking_zone`
   ADD UNIQUE KEY `zone_key` (`zone_key`);
 
 --
+-- Indexes for table `pending_plate_review`
+--
+ALTER TABLE `pending_plate_review`
+  ADD PRIMARY KEY (`review_id`),
+  ADD KEY `zone_id` (`zone_id`),
+  ADD KEY `resolved_by` (`resolved_by`),
+  ADD KEY `resulting_log_id` (`resulting_log_id`),
+  ADD KEY `idx_review_status` (`status`),
+  ADD KEY `idx_review_captured` (`captured_at`);
+
+--
 -- Indexes for table `vehicle`
 --
 ALTER TABLE `vehicle`
@@ -377,6 +410,12 @@ ALTER TABLE `parking_zone`
   MODIFY `zone_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
+-- AUTO_INCREMENT for table `pending_plate_review`
+--
+ALTER TABLE `pending_plate_review`
+  MODIFY `review_id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `vehicle`
 --
 ALTER TABLE `vehicle`
@@ -419,6 +458,14 @@ ALTER TABLE `parking_session`
 --
 ALTER TABLE `parking_slot`
   ADD CONSTRAINT `parking_slot_ibfk_1` FOREIGN KEY (`zone_id`) REFERENCES `parking_zone` (`zone_id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `pending_plate_review`
+--
+ALTER TABLE `pending_plate_review`
+  ADD CONSTRAINT `pending_plate_review_ibfk_1` FOREIGN KEY (`zone_id`) REFERENCES `parking_zone` (`zone_id`),
+  ADD CONSTRAINT `pending_plate_review_ibfk_2` FOREIGN KEY (`resolved_by`) REFERENCES `admin_user` (`admin_id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `pending_plate_review_ibfk_3` FOREIGN KEY (`resulting_log_id`) REFERENCES `entry_exit_log` (`log_id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `vehicle`

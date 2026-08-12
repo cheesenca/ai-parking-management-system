@@ -12,3 +12,7 @@ class ManualApprovalRequest(BaseModel):
     event_type: Literal["entry", "exit"]
     timestamp: str
     original_confidence: Optional[float] = None
+    # Set when approving from the Pending Review list (or the live modal, if
+    # the detection was already queued) — links this approval back to the
+    # persisted row instead of leaving it stuck at 'queued'/'needs_review'.
+    review_id: Optional[int] = None

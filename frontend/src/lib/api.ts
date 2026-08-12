@@ -21,6 +21,10 @@ export interface Detection {
   timestamp: string;
   status: 'detected' | 'low_confidence' | 'no_plate';
   member: Member | null;
+  // Set when status !== 'detected' — this detection was persisted to the
+  // Pending Review queue immediately on capture, so it's never lost even
+  // if it's not approved from this live view right now.
+  review_id?: number | null;
 }
 
 export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry' | 'exit'; zone?: Zone; enabled?: boolean } = {}) {
@@ -30,6 +34,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
   const [latest, setLatest]  = useState<Detection | null>(null);
   const [scanCount, setScanCount] = useState(0);
   const [vehiclesInFrame, setVehiclesInFrame] = useState(0);
+  const [retryTick, setRetryTick] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -44,6 +49,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
     }
 
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout>;
     const q = new URLSearchParams({ camera_index: String(cameraIndex), zone });
     if (gateType) q.set('gate_type', gateType);
 
@@ -88,6 +94,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
           const d = data.detection as {
             plate_detected: string; confidence: number; vehicle_type: string;
             event_type: 'entry' | 'exit'; timestamp: string; status: string; member?: Member;
+            review_id?: number | null;
           };
           const det: Detection = {
             plate_detected: d.plate_detected || '???',
@@ -97,6 +104,7 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
             timestamp: d.timestamp || new Date().toISOString(),
             status: (d.status as Detection['status']) || 'detected',
             member: d.member || null,
+            review_id: d.review_id ?? null,
           };
           setLatest(det);
           setScanCount(c => c + 1);
@@ -113,15 +121,20 @@ export function useLiveDetection(opts: { cameraIndex?: number; gateType?: 'entry
 
     ws.onclose = () => {
       clearTimeout(failTimer);
-      if (!cancelled) setConn('disconnected');
+      if (!cancelled) {
+        setConn('disconnected');
+        setFrame(null);
+        retryTimer = setTimeout(() => setRetryTick(t => t + 1), 4000);
+      }
     };
 
     return () => {
       cancelled = true;
       clearTimeout(failTimer);
+      clearTimeout(retryTimer);
       try { ws.close(); } catch {}
     };
-  }, [cameraIndex, gateType, enabled]);
+  }, [cameraIndex, gateType, enabled, retryTick]);
 
   return { conn, frame, latest, scanCount, vehiclesInFrame };
 }

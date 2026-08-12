@@ -1,10 +1,11 @@
-import type { 
-  AuthUser, 
-  Member, 
-  EntryLog, 
-  ZoneCapacity, 
-  ForecastDay, 
-  OccupancyPoint, 
+import type {
+  AuthUser,
+  Member,
+  EntryLog,
+  ZoneCapacity,
+  ForecastDay,
+  OccupancyPoint,
+  PendingReview,
 } from './types';
 
 const BASE =
@@ -236,6 +237,7 @@ export async function apiManualApprovePlate(payload: {
   event_type: 'entry' | 'exit';
   timestamp: string;
   original_confidence?: number;
+  review_id?: number;
 }): Promise<{
   recorded: boolean;
   plate: string;
@@ -246,6 +248,24 @@ export async function apiManualApprovePlate(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function apiGetPendingReviews(params?: {
+  zone?: string;
+  status?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<{ items: PendingReview[]; total: number; page: number; page_size: number }> {
+  const q = new URLSearchParams();
+  if (params?.zone) q.set('zone', params.zone);
+  if (params?.status) q.set('status', params.status);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.page_size) q.set('page_size', String(params.page_size));
+  return apiFetch(`/api/v1/ocr/pending-reviews?${q}`);
+}
+
+export async function apiDismissPendingReview(reviewId: number): Promise<{ dismissed: boolean; review_id: number }> {
+  return apiFetch(`/api/v1/ocr/pending-reviews/${reviewId}/dismiss`, { method: 'POST' });
 }
 
 export async function apiForecastZones(): Promise<ZoneCapacity[]> {

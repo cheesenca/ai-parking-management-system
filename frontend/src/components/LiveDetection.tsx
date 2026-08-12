@@ -108,7 +108,7 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
 
       {status === 'denied' && det && !modalOpen && (
         <div style={{ marginTop: 16, fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
-          Manual verification dismissed for this scan — waiting for the next vehicle.
+          Closed for this scan — still saved in Pending Review, waiting for the next vehicle.
         </div>
       )}
 
@@ -117,11 +117,13 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
           key={det.timestamp}
           detection={det}
           zone={selectedZone}
+          reviewId={det.review_id}
           onClose={() => setModalOpen(false)}
           onApproved={() => {
             setVerified(lpr.scanCount);
             setModalOpen(false);
           }}
+          onDismissed={() => setModalOpen(false)}
         />
       )}
     </div>

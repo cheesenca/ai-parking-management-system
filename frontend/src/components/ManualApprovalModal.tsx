@@ -3,19 +3,29 @@ import { useState } from 'react';
 import { X, ShieldCheck, Loader2 } from 'lucide-react';
 import type { Zone } from '@/lib/types';
 import type { Detection } from '@/lib/api';
-import { apiManualApprovePlate } from '@/lib/backendApi';
+import { apiManualApprovePlate, apiDismissPendingReview } from '@/lib/backendApi';
 import ModalPortal from './ModalPortal';
 
 interface Props {
   detection: Detection;
   zone: Zone;
+  // Set when this detection was already persisted to the Pending Review
+  // queue (true for every non-'detected' event now) — links Approve/Reject
+  // back to that row instead of just closing the modal and losing it.
+  reviewId?: number | null;
+  imageBase64?: string | null;
   onClose: () => void;
   onApproved: (classification: 'Member' | 'Visitor') => void;
+  // Called after a successful dismiss, in addition to onClose — lets a list
+  // view (e.g. the Pending Review page) refresh itself. Falls back to
+  // onClose if not provided.
+  onDismissed?: () => void;
 }
 
-export default function ManualApprovalModal({ detection, zone, onClose, onApproved }: Props) {
+export default function ManualApprovalModal({ detection, zone, reviewId, imageBase64, onClose, onApproved, onDismissed }: Props) {
   const [plate, setPlate] = useState(detection.plate_detected === '???' ? '' : detection.plate_detected);
   const [saving, setSaving] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleApprove = async () => {
@@ -32,12 +42,32 @@ export default function ManualApprovalModal({ detection, zone, onClose, onApprov
         event_type: detection.event_type,
         timestamp: detection.timestamp,
         original_confidence: detection.confidence,
+        review_id: reviewId ?? undefined,
       });
       onApproved(result.classification);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to record manual approval');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    // Nothing persisted yet (e.g. queue_for_review failed) — just close,
+    // same as before.
+    if (reviewId == null) {
+      onClose();
+      return;
+    }
+    setError(null);
+    setDismissing(true);
+    try {
+      await apiDismissPendingReview(reviewId);
+      (onDismissed ?? onClose)();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to dismiss');
+    } finally {
+      setDismissing(false);
     }
   };
 
@@ -67,6 +97,14 @@ export default function ManualApprovalModal({ detection, zone, onClose, onApprov
           The AI read this plate with low confidence ({(detection.confidence * 100).toFixed(0)}%).
           Correct it if needed, then approve to record it — it will be checked against registered members.
         </p>
+
+        {imageBase64 && (
+          <img
+            src={`data:image/jpeg;base64,${imageBase64}`}
+            alt="Captured plate"
+            style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 9, border: '1px solid var(--border)', background: '#0B1220', marginBottom: 16 }}
+          />
+        )}
 
         <div>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 6 }}>
@@ -100,17 +138,18 @@ export default function ManualApprovalModal({ detection, zone, onClose, onApprov
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button
             className="btn-secondary"
-            style={{ flex: 1, justifyContent: 'center', padding: '10px 0' }}
-            onClick={onClose}
-            disabled={saving}
+            style={{ flex: 1, justifyContent: 'center', padding: '10px 0', display: 'flex', alignItems: 'center', gap: 6 }}
+            onClick={handleReject}
+            disabled={saving || dismissing}
           >
-            Reject
+            {dismissing && <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} />}
+            {dismissing ? 'Dismissing…' : 'Reject'}
           </button>
           <button
             className="btn-primary"
             style={{ flex: 1, justifyContent: 'center', padding: '10px 0', display: 'flex', alignItems: 'center', gap: 6 }}
             onClick={handleApprove}
-            disabled={saving}
+            disabled={saving || dismissing}
           >
             {saving && <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} />}
             {saving ? 'Recording…' : 'Approve & Record'}

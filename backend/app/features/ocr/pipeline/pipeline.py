@@ -72,6 +72,10 @@ class AIPSPipeline:
 
         # Per-track plate reading buffer (for multi-frame averaging)
         self.plate_buffer: dict[int, list[str]] = defaultdict(list)
+        # Per-track raw plate crops, paired with plate_buffer — kept so a
+        # low-confidence event has more than one (identical, useless-to-retry)
+        # frame to work with when it's rereads later by the review queue.
+        self.crop_buffer: dict[int, list[np.ndarray]] = defaultdict(list)
 
         print("[AIPS] Pipeline ready.\n")
 
@@ -94,6 +98,10 @@ class AIPSPipeline:
             'event_type':   'entry' | 'exit',
             'timestamp':    str (ISO format),
             'status':       'detected' | 'low_confidence' | 'no_plate',
+            'track_id':     int,
+            'crops':        list[np.ndarray] — raw plate crops buffered during
+                             this track's approach, for the review queue to
+                             persist/reread when status != 'detected'.
         }
         """
         events   = []
@@ -137,7 +145,7 @@ class AIPSPipeline:
                 ocr_conf    = 0.0
 
                 if self.direction_detector.is_near_tripwire(cy):
-                    plate_result = self._run_ocr(frame, x1, y1, x2, y2, results)
+                    plate_result = self._run_ocr(frame, x1, y1, x2, y2, results, track_id)
                     if plate_result:
                         plate_text, ocr_conf = plate_result
                         if plate_text:
@@ -162,9 +170,11 @@ class AIPSPipeline:
                         'timestamp':    datetime.now().isoformat(),
                         'status':       status,
                         'track_id':     track_id,
+                        'crops':        list(self.crop_buffer.get(track_id, [])),
                     })
-                    # Clear buffer after event fires
+                    # Clear buffers after event fires
                     self.plate_buffer.pop(track_id, None)
+                    self.crop_buffer.pop(track_id, None)
                     print(f"[EVENT] {direction.upper()} | {label} | "
                           f"plate={final_plate or '?'} | conf={ocr_conf:.0%} | {status}")
 
@@ -211,7 +221,7 @@ class AIPSPipeline:
 
         return {'events': events, 'vehicles': vehicles, 'frame': annotated}
 
-    def _run_ocr(self, frame, vx1, vy1, vx2, vy2, results) -> tuple[str, float] | None:
+    def _run_ocr(self, frame, vx1, vy1, vx2, vy2, results, track_id: int | None = None) -> tuple[str, float] | None:
         """
         Finds the plate crop and runs EasyOCR on it.
         Prefers a dedicated license_plate detection box if available,
@@ -234,6 +244,14 @@ class AIPSPipeline:
 
         if plate_crop is None or plate_crop.size == 0:
             return None
+
+        # Buffer the raw crop regardless of whether OCR reads it successfully —
+        # even a failed read is a real image a human (or a later reread with
+        # different preprocessing) can still work with.
+        if track_id is not None:
+            self.crop_buffer[track_id].append(plate_crop.copy())
+            if len(self.crop_buffer[track_id]) > 5:
+                self.crop_buffer[track_id].pop(0)
 
         # Preprocess and OCR
         processed = preprocess_plate(plate_crop)

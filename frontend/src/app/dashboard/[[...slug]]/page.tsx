@@ -10,6 +10,7 @@ import ListPage from '@/app/dashboard/List';
 import MembersPage from '@/app/dashboard/Member';
 import AnalyticsPage from '@/app/dashboard/Analytics';
 import CalibrationPage from '@/app/dashboard/Calibration';
+import PendingReviewPage from '@/app/dashboard/PendingReview';
 
 const VIEWS: Record<string, React.ComponentType> = {
   tracker: TrackerPage,
@@ -17,6 +18,7 @@ const VIEWS: Record<string, React.ComponentType> = {
   members: MembersPage,
   analytics: AnalyticsPage,
   calibration: CalibrationPage,
+  'pending-review': PendingReviewPage,
 };
 
 export default function DashboardPage({

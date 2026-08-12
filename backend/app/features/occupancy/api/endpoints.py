@@ -553,18 +553,27 @@ async def slots_camera_ws(
                 last_push = now
 
             occ = sum(1 for v in status.values() if v == "Occupied")
-            await websocket.send_json({
-                "frame": frame_b64,
-                "detections": len(dets),
-                "occupied": occ,
-                "available": (len(status) - occ) if status else 0,
-                "calibrated": bool(calibration),
-                "calibration_active": bool(use_calibration),
-                "align_score": align_score,
-            })
+            try:
+                await websocket.send_json({
+                    "frame": frame_b64,
+                    "detections": len(dets),
+                    "occupied": occ,
+                    "available": (len(status) - occ) if status else 0,
+                    "calibrated": bool(calibration),
+                    "calibration_active": bool(use_calibration),
+                    "align_score": align_score,
+                })
+            except Exception:
+                # Any send failure (not just a clean WebSocketDisconnect) means
+                # the client is gone — stop looping instead of retrying forever
+                # against a dead socket while still holding the camera open.
+                logger.info(f"zone={zone} send failed, treating as disconnect.")
+                break
             await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         logger.info("Client disconnected.")
+    except Exception:
+        logger.exception(f"zone={zone} slots websocket loop crashed")
     finally:
         cap.release()
 

@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
 from app.features.auth.endpoints import get_current_user
 from app.features.forecast.services.model import forecast_next_days
-from app.features.forecast.services.retrain import retrain_all_zones_arima
+from app.features.forecast.services.retrain import retrain_all_zones
 from app.features.forecast.report import build_report
 from app.features.forecast.models import (
     AREA_CODES,
@@ -262,16 +262,15 @@ def get_prophet_forecast(
 # POST /api/forecast/retrain
 @router.post("/retrain")
 def trigger_retrain(
-    db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
-    Admin-triggered on-demand ARIMA retrain, bypassing the nightly schedule
+    Admin-triggered on-demand Prophet retrain, bypassing the nightly schedule
     """
     if getattr(current_user, "role", None) != "Admin":
         raise HTTPException(status_code=403, detail="Only Admins can trigger a retrain")
 
-    results = retrain_all_zones_arima(db)
+    results = retrain_all_zones()
     return {"triggered_at": datetime.now().isoformat(), "results": results}
 
 
