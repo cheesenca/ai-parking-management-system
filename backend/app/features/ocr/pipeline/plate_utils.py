@@ -44,6 +44,37 @@ def clean_plate_text(raw: str) -> str:
     return cleaned.strip()
 
 
+def normalize_plate(raw: str) -> str:
+    """
+    Canonical form used for both DB lookups and format validation, since OCR
+    spacing is unreliable: cleaned, uppercased, with all whitespace stripped.
+    """
+    import re
+    return re.sub(r'\s+', '', clean_plate_text(raw))
+
+
+def is_valid_plate_format(plate: str) -> bool:
+    """
+    Indonesian plate grammar: [1-2 letters][1-4 digits][2-3 letters],
+    checked against the space-stripped normalized form.
+    """
+    import re
+    return bool(re.fullmatch(r'[A-Z]{1,2}\d{1,4}[A-Z]{2,3}', plate))
+
+
+def format_plate_display(plate_compact: str) -> str:
+    """
+    Reinserts spaces into a normalized plate for display/storage, matching
+    the seed data convention (e.g. "B1234ABC" -> "B 1234 ABC"). Returns the
+    input unchanged if it doesn't match the expected grammar.
+    """
+    import re
+    m = re.fullmatch(r'([A-Z]{1,2})(\d{1,4})([A-Z]{2,3})', plate_compact)
+    if not m:
+        return plate_compact
+    return f"{m.group(1)} {m.group(2)} {m.group(3)}"
+
+
 def average_plate_readings(readings: list[str]) -> str:
     """
     When OCR is run on multiple frames of the same stopped vehicle,

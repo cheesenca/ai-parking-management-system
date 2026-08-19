@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
+from app.features.auth.endpoints import get_current_user
 from app.features.forecast.services.model import forecast_next_days
+from app.features.forecast.services.retrain import retrain_all_zones
 from app.features.forecast.report import build_report
 from app.features.forecast.models import (
     AREA_CODES,
@@ -255,6 +257,21 @@ def get_prophet_forecast(
     except RuntimeError as exc:
         logger.error("Prophet forecast failed to load: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+# POST /api/forecast/retrain
+@router.post("/retrain")
+def trigger_retrain(
+    current_user=Depends(get_current_user),
+):
+    """
+    Admin-triggered on-demand Prophet retrain, bypassing the nightly schedule
+    """
+    if getattr(current_user, "role", None) != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admins can trigger a retrain")
+
+    results = retrain_all_zones()
+    return {"triggered_at": datetime.now().isoformat(), "results": results}
 
 
 # GET /api/forecast/zones

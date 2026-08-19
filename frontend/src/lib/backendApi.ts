@@ -1,10 +1,11 @@
-import type { 
-  AuthUser, 
-  Member, 
-  EntryLog, 
-  ZoneCapacity, 
-  ForecastDay, 
-  OccupancyPoint, 
+import type {
+  AuthUser,
+  Member,
+  EntryLog,
+  ZoneCapacity,
+  ForecastDay,
+  OccupancyPoint,
+  PendingReview,
 } from './types';
 
 const BASE =
@@ -46,10 +47,10 @@ async function apiFetch<T>(
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = (err as { detail?: unknown }).detail;
     let message: string;
-
     if (typeof detail === 'string' && detail) {
       message = detail;
     } else if (Array.isArray(detail)) {
+      // FastAPI validation errors: a list of {loc, msg, type} objects
       message = detail.map(d => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join('; ');
     } else if (detail && typeof detail === 'object') {
       message = JSON.stringify(detail);
@@ -129,7 +130,6 @@ export async function apiGetMembers(params?: {
   if (params?.sort) q.set('sort', params.sort);
   if (params?.page) q.set('page', String(params.page));
   if (params?.page_size) q.set('page_size', String(params.page_size));
-
   return apiFetch(`/api/v1/members?${q}`);
 }
 
@@ -237,6 +237,7 @@ export async function apiManualApprovePlate(payload: {
   event_type: 'entry' | 'exit';
   timestamp: string;
   original_confidence?: number;
+  review_id?: number;
 }): Promise<{
   recorded: boolean;
   plate: string;
@@ -247,6 +248,24 @@ export async function apiManualApprovePlate(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function apiGetPendingReviews(params?: {
+  zone?: string;
+  status?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<{ items: PendingReview[]; total: number; page: number; page_size: number }> {
+  const q = new URLSearchParams();
+  if (params?.zone) q.set('zone', params.zone);
+  if (params?.status) q.set('status', params.status);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.page_size) q.set('page_size', String(params.page_size));
+  return apiFetch(`/api/v1/ocr/pending-reviews?${q}`);
+}
+
+export async function apiDismissPendingReview(reviewId: number): Promise<{ dismissed: boolean; review_id: number }> {
+  return apiFetch(`/api/v1/ocr/pending-reviews/${reviewId}/dismiss`, { method: 'POST' });
 }
 
 export async function apiForecastZones(): Promise<ZoneCapacity[]> {

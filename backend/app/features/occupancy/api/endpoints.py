@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import json
+import time
 import asyncio
 import base64
 import logging
@@ -12,6 +13,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from ultralytics import YOLO
+import torch
 
 from app.core.config import settings
 from app.core.database import get_db, SessionLocal
@@ -19,16 +21,21 @@ from app.core.models import EntryExitLog, OccupancySnapshot, ParkingSlot, Parkin
 from app.features.occupancy.schemas.slots import CategoryInfo, ZoneUpdate, CapacityUpdate
 from app.features.occupancy.services.occupancy import SlotSmoother, compute_iou
 from app.features.auth.endpoints import get_current_user
+from app.features.ocr.pipeline.plate_utils import normalize_plate, is_valid_plate_format
+from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
+from app.features.ocr.services.session_tracking import record_entry, record_exit
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 ws_router = APIRouter(tags=["WebSocket"])
 
-_slot_model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+# Same YOLO_DEVICE knob the OCR pipeline respects, so both live camera paths
+# stay consistent (and CPU can be forced for debugging without reinstalling).
+_device = "cuda" if torch.cuda.is_available() and settings.YOLO_DEVICE.lower() != "cpu" else "cpu"
 
-SNAPSHOT_INTERVAL_SEC = 60
-_LAST_SNAPSHOT_AT: dict[str, datetime] = {}
+_slot_model = YOLO(str(settings.OCCUPANCY_MODEL_PATH))
+_slot_model.to(_device)
 
 
 def _bootstrap(f: str) -> None:
@@ -69,9 +76,14 @@ SLOT_LAYOUTS: dict[str, list[dict]] = {
 SLOT_LAYOUTS["eastwest"] = SLOT_LAYOUTS["west"] + SLOT_LAYOUTS["east"]
 
 ZONE_CAMERA_DEVICE: dict[str, str] = {
-    "west": "1",
-    "east": "1",
+    "west": "0",
+    "east": "0",
+    "eastwest": "0",
 }
+
+# Throttles how often _persist_slot_update writes an OccupancySnapshot row,
+# independent of the real-time ParkingSlot/ParkingZone update cadence.
+_last_snapshot_at: dict[str, float] = {}
 
 COLOR_AVAIL = (30, 200, 60)
 COLOR_OCC = (30, 60, 220)
@@ -344,29 +356,30 @@ def _persist_slot_update(zone_key: str, status: dict[str, str], layout: list[dic
         zone.visitor_used = used_by_cat.get("Visitor", 0)
         zone.used_capacity = sum(used_by_cat.values())
 
-        now = datetime.utcnow()
-        last = _LAST_SNAPSHOT_AT.get(zone_key)
-        if last is None or (now - last).total_seconds() >= SNAPSHOT_INTERVAL_SEC:
-            total_cap = sum(cat_total.values())
-            total_occ = zone.used_capacity
-            total_avail = max(total_cap - total_occ, 0)
-            rate = (total_occ / total_cap * 100) if total_cap else 0.0
+        now = time.time()
+        if now - _last_snapshot_at.get(zone_key, 0) >= settings.OCCUPANCY_SNAPSHOT_INTERVAL_SEC:
+            total_occupied = zone.used_capacity
+            rate = round(total_occupied / zone.total_capacity * 100, 1) if zone.total_capacity else 0.0
             db.add(OccupancySnapshot(
                 zone_id=zone.zone_id,
-                recorded_at=now,
-                total_capacity=total_cap,
-                total_occupied=total_occ,
-                total_available=total_avail,
+                recorded_at=datetime.now(),
+                total_capacity=zone.total_capacity,
+                total_occupied=total_occupied,
+                total_available=max(0, zone.total_capacity - total_occupied),
                 overall_rate_pct=rate,
-                employee_used=zone.employee_used, employee_total=cat_total.get("Employee", 0),
-                vendor_used=zone.vendor_used, vendor_total=cat_total.get("Vendor", 0),
-                visitor_used=zone.visitor_used, visitor_total=cat_total.get("Visitor", 0),
+                employee_used=zone.employee_used,
+                employee_total=zone.employee_capacity,
+                vendor_used=zone.vendor_used,
+                vendor_total=zone.vendor_capacity,
+                visitor_used=zone.visitor_used,
+                visitor_total=zone.visitor_capacity,
             ))
-            _LAST_SNAPSHOT_AT[zone_key] = now
+            _last_snapshot_at[zone_key] = now
             logger.info(
                 f"zone={zone_key} OccupancySnapshot written: "
-                f"{total_occ}/{total_cap} occupied ({rate:.1f}%)"
+                f"{total_occupied}/{zone.total_capacity} occupied ({rate:.1f}%)"
             )
+
         db.commit()
     except Exception as e:
         db.rollback()
@@ -499,7 +512,7 @@ async def slots_camera_ws(
                     h0, w0 = enhanced.shape[:2]
                     scale = 640 / w0
                     inf_f = cv2.resize(enhanced, (640, int(h0 * scale)))
-                    results = model(inf_f, conf=conf, iou=0.45, agnostic_nms=True, verbose=False)
+                    results = model(inf_f, conf=conf, iou=0.45, agnostic_nms=True, device=_device, verbose=False)
                     dets: list[dict] = []
                     for box in (results[0].boxes or []):
                         cls_id = int(box.cls[0])
@@ -540,18 +553,27 @@ async def slots_camera_ws(
                 last_push = now
 
             occ = sum(1 for v in status.values() if v == "Occupied")
-            await websocket.send_json({
-                "frame": frame_b64,
-                "detections": len(dets),
-                "occupied": occ,
-                "available": (len(status) - occ) if status else 0,
-                "calibrated": bool(calibration),
-                "calibration_active": bool(use_calibration),
-                "align_score": align_score,
-            })
+            try:
+                await websocket.send_json({
+                    "frame": frame_b64,
+                    "detections": len(dets),
+                    "occupied": occ,
+                    "available": (len(status) - occ) if status else 0,
+                    "calibrated": bool(calibration),
+                    "calibration_active": bool(use_calibration),
+                    "align_score": align_score,
+                })
+            except Exception:
+                # Any send failure (not just a clean WebSocketDisconnect) means
+                # the client is gone — stop looping instead of retrying forever
+                # against a dead socket while still holding the camera open.
+                logger.info(f"zone={zone} send failed, treating as disconnect.")
+                break
             await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         logger.info("Client disconnected.")
+    except Exception:
+        logger.exception(f"zone={zone} slots websocket loop crashed")
     finally:
         cap.release()
 
@@ -838,6 +860,50 @@ def update_parking_slots(
 
     db.commit()
     return {"message": "Slots updated successfully", "zone": payload.zone}
+
+
+# POST /api/slots/detection
+@router.post("/detection")
+def record_detection(
+    event: DetectionEvent, 
+    db: Session = Depends(get_db)
+):
+    """
+    Log gate entry/exit events while managing active parking sessions
+    """
+    zone = db.query(ParkingZone).filter(ParkingZone.zone_key == event.zone).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+
+    plate_norm = normalize_plate(event.plate)
+    vehicle = find_vehicle_by_plate(db, plate_norm)
+    if vehicle is None and not is_valid_plate_format(plate_norm):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Plate '{event.plate}' is unregistered and not a valid Indonesian plate format — not recorded",
+        )
+    if vehicle is None:
+        vehicle = resolve_or_create_vehicle(db, plate_norm)
+
+    event_type = "Entry" if event.status == "Occupied" else "Exit"
+    event_ts = datetime.fromisoformat(event.timestamp)
+    new_log = EntryExitLog(
+        zone_id=zone.zone_id,
+        event_type=event_type,
+        plate_detected=plate_norm[:20],
+        confidence_score=event.confidence,
+        event_timestamp=event_ts,
+        auth_method="AI_LPR",
+    )
+    db.add(new_log)
+
+    if event_type == "Entry":
+        record_entry(db, vehicle.vehicle_id, zone.zone_id, event_ts)
+    else:
+        record_exit(db, vehicle.vehicle_id, event_ts)
+
+    db.commit()
+    return {"message": "Detection event logged and session synced successfully"}
 
 
 # GET /api/slots/logs

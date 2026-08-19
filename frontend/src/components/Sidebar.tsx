@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { apiIsOnline } from '@/lib/backendApi';
-import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car, Crosshair, X } from 'lucide-react';
+import { apiIsOnline, apiGetPendingReviews } from '@/lib/backendApi';
+import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car, Crosshair, AlertCircle, X } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard/tracker', label: 'Parking Tracer', icon: ScanLine, roles: ['Admin', 'Security'] },
   { href: '/dashboard/list', label: 'Parking List', icon: ClipboardList, roles: ['Admin', 'Security'] },
+  { href: '/dashboard/pending-review', label: 'Pending Review', icon: AlertCircle, roles: ['Admin', 'Security'] },
   { href: '/dashboard/members', label: 'Members', icon: Users, roles: ['Admin'] },
   { href: '/dashboard/analytics',label: 'Analytics', icon: BarChart2, roles: ['Admin'] },
   { href: '/dashboard/calibration', label: 'Slot Calibration', icon: Crosshair, roles: ['Admin'] },
@@ -20,6 +21,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
   const router = useRouter();
   const { user, logout } = useAuth();
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,12 +31,29 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
     };
     check();
     const interval = setInterval(check, 10_000);
-    
-    return () => { 
-      cancelled = true; 
-      clearInterval(interval); 
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const zone = user.role === 'Security' ? user.location ?? undefined : undefined;
+    const check = async () => {
+      try {
+        const data = await apiGetPendingReviews({ zone, status: 'needs_review', page_size: 1 });
+        if (!cancelled) setPendingCount(data.total);
+      } catch {
+        // backend offline — leave last-known count as is
+      }
+    };
+    check();
+    const interval = setInterval(check, 15_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user]);
 
   const handleLogout = () => { logout(); router.push('/'); };
   const allowed = navItems.filter(n => user && n.roles.includes(user.role));
@@ -101,6 +120,15 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
             }}>
               <item.icon size={15} style={{ color: active ? 'var(--red)' : 'var(--muted)', flexShrink: 0 }} />
               {item.label}
+              {item.href === '/dashboard/pending-review' && pendingCount > 0 && (
+                <span style={{
+                  marginLeft: 'auto', minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
+                  background: 'var(--red)', color: '#fff', fontSize: 10, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
             </Link>
           );
         })}

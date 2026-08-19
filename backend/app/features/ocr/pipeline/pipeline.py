@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 import cv2
 import numpy as np
 import easyocr
+import torch
 from ultralytics import YOLO
 from datetime import datetime
 from collections import defaultdict
-from pathlib import Path
 
 from plate_utils import preprocess_plate, clean_plate_text, average_plate_readings
 from direction_detector import DirectionDetector
@@ -35,6 +36,12 @@ class AIPSPipeline:
     def __init__(self, use_pretrained: bool = False):
         print("[AIPS] Loading models...")
 
+        # Single knob (YOLO_DEVICE env var) drives every model in this pipeline —
+        # the YOLO detector, EasyOCR, all of it — so forcing CPU for debugging
+        # doesn't require reinstalling anything.
+        use_gpu = torch.cuda.is_available() and os.getenv("YOLO_DEVICE", "cuda").lower() != "cpu"
+        self.device = "cuda" if use_gpu else "cpu"
+
         # Load YOLO model
         if use_pretrained or not DETECTOR_PATH.exists():
             print("[AIPS]   YOLOv8 — using base pretrained model (no custom training yet)")
@@ -47,10 +54,17 @@ class AIPSPipeline:
             print(f"[AIPS]   YOLOv8 — loading {DETECTOR_PATH}")
             self.detector = YOLO(str(DETECTOR_PATH))
             self.has_plate_class = 'license_plate' in self.detector.names.values()
+        self.detector.to(self.device)
+
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
         # Load EasyOCR (downloads language models on first run ~500MB)
-        print("[AIPS]   EasyOCR — loading (first run downloads language models)...")
-        self.ocr = easyocr.Reader(['en', 'id'], gpu=False)
+        print(f"[AIPS]   EasyOCR — loading on {'GPU' if use_gpu else 'CPU'} "
+              "(first run downloads language models)...")
+        self.ocr = easyocr.Reader(
+            ['en', 'id'], gpu=use_gpu, download_enabled=True,
+            model_storage_directory=str(MODEL_DIR),
+        )
         print("[AIPS]   EasyOCR ready")
 
         # Direction detector
@@ -58,6 +72,10 @@ class AIPSPipeline:
 
         # Per-track plate reading buffer (for multi-frame averaging)
         self.plate_buffer: dict[int, list[str]] = defaultdict(list)
+        # Per-track raw plate crops, paired with plate_buffer — kept so a
+        # low-confidence event has more than one (identical, useless-to-retry)
+        # frame to work with when it's rereads later by the review queue.
+        self.crop_buffer: dict[int, list[np.ndarray]] = defaultdict(list)
 
         print("[AIPS] Pipeline ready.\n")
 
@@ -80,6 +98,10 @@ class AIPSPipeline:
             'event_type':   'entry' | 'exit',
             'timestamp':    str (ISO format),
             'status':       'detected' | 'low_confidence' | 'no_plate',
+            'track_id':     int,
+            'crops':        list[np.ndarray] — raw plate crops buffered during
+                             this track's approach, for the review queue to
+                             persist/reread when status != 'detected'.
         }
         """
         events   = []
@@ -95,7 +117,7 @@ class AIPSPipeline:
 
         # Run YOLO with tracking
         results = self.detector.track(frame, persist=True, conf=YOLO_CONF,
-                                      verbose=False)[0]
+                                      device=self.device, verbose=False)[0]
 
         if results.boxes.id is None:
             return {'events': [], 'vehicles': [], 'frame': annotated}
@@ -123,7 +145,7 @@ class AIPSPipeline:
                 ocr_conf    = 0.0
 
                 if self.direction_detector.is_near_tripwire(cy):
-                    plate_result = self._run_ocr(frame, x1, y1, x2, y2, results)
+                    plate_result = self._run_ocr(frame, x1, y1, x2, y2, results, track_id)
                     if plate_result:
                         plate_text, ocr_conf = plate_result
                         if plate_text:
@@ -148,9 +170,11 @@ class AIPSPipeline:
                         'timestamp':    datetime.now().isoformat(),
                         'status':       status,
                         'track_id':     track_id,
+                        'crops':        list(self.crop_buffer.get(track_id, [])),
                     })
-                    # Clear buffer after event fires
+                    # Clear buffers after event fires
                     self.plate_buffer.pop(track_id, None)
+                    self.crop_buffer.pop(track_id, None)
                     print(f"[EVENT] {direction.upper()} | {label} | "
                           f"plate={final_plate or '?'} | conf={ocr_conf:.0%} | {status}")
 
@@ -197,7 +221,7 @@ class AIPSPipeline:
 
         return {'events': events, 'vehicles': vehicles, 'frame': annotated}
 
-    def _run_ocr(self, frame, vx1, vy1, vx2, vy2, results) -> tuple[str, float] | None:
+    def _run_ocr(self, frame, vx1, vy1, vx2, vy2, results, track_id: int | None = None) -> tuple[str, float] | None:
         """
         Finds the plate crop and runs EasyOCR on it.
         Prefers a dedicated license_plate detection box if available,
@@ -220,6 +244,14 @@ class AIPSPipeline:
 
         if plate_crop is None or plate_crop.size == 0:
             return None
+
+        # Buffer the raw crop regardless of whether OCR reads it successfully —
+        # even a failed read is a real image a human (or a later reread with
+        # different preprocessing) can still work with.
+        if track_id is not None:
+            self.crop_buffer[track_id].append(plate_crop.copy())
+            if len(self.crop_buffer[track_id]) > 5:
+                self.crop_buffer[track_id].pop(0)
 
         # Preprocess and OCR
         processed = preprocess_plate(plate_crop)

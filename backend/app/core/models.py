@@ -117,6 +117,7 @@ class ParkingZone(Base):
     entry_exit_logs = relationship("EntryExitLog", back_populates="zone")
     occupancy_snapshots = relationship("OccupancySnapshot", back_populates="zone")
     analytics_data = relationship("AnalyticsData", back_populates="zone")
+    pending_plate_reviews = relationship("PendingPlateReview", back_populates="zone")
 
     # Calculating the remaining available slots for each category
     @property
@@ -364,4 +365,59 @@ class AnalyticsData(Base):
     zone = relationship("ParkingZone", back_populates="analytics_data")
     def __repr__(self):
         return f"AnalyticsData zone={self.zone_id} date={self.record_date}"
-    
+
+
+class PendingPlateReview(Base):
+    """
+    A low-confidence (or plate-less) LPR detection that couldn't be
+    auto-granted. Written immediately on capture so it's never lost even
+    if no one is watching the live dashboard — the background reread job
+    (services/review_queue.py) tries to resolve it automatically; anything
+    still unresolved surfaces in the Pending Review list for a security
+    officer to approve or dismiss.
+    """
+    __tablename__ = "pending_plate_review"
+    __table_args__ = (
+        Index("idx_review_status", "status"),
+        Index("idx_review_captured", "captured_at"),
+    )
+
+    # Attributes
+    review_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    zone_id = Column(BigInteger, ForeignKey("parking_zone.zone_id"), nullable=False)
+    track_id = Column(Integer, nullable=True)
+    plate_guess = Column(String(20), nullable=True)
+    confidence = Column(Float, nullable=True, default=0.0)
+    vehicle_type = Column(String(50), nullable=True)
+    event_type = Column(Enum("entry", "exit", name="review_event_type_enum"), nullable=False)
+    image_paths = Column(JSON, nullable=True)
+    # 'queued' -> 'auto_resolved' | 'needs_review' -> 'reviewed' | 'dismissed'
+    status = Column(String(20), nullable=False, default="queued")
+    captured_at = Column(DateTime, server_default=func.now(), nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(BigInteger, ForeignKey("admin_user.admin_id", ondelete="SET NULL"), nullable=True)
+    resulting_log_id = Column(BigInteger, ForeignKey("entry_exit_log.log_id", ondelete="SET NULL"), nullable=True)
+
+    # Relationships
+    zone = relationship("ParkingZone", back_populates="pending_plate_reviews")
+
+    def to_review_dict(self, zone_key: str = '', image_base64: str | None = None) -> dict:
+        """
+        Converting a pending review row into a Python dictionary format
+        """
+        return {
+            'review_id': self.review_id,
+            'plate_guess': self.plate_guess,
+            'confidence': self.confidence or 0.0,
+            'conf_pct': f'{self.confidence * 100:.0f}%' if self.confidence else '—',
+            'vehicle_type': self.vehicle_type,
+            'event_type': self.event_type,
+            'zone': zone_key,
+            'status': self.status,
+            'captured_at': self.captured_at.isoformat() if self.captured_at else '',
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'image_base64': image_base64,
+        }
+
+    def __repr__(self):
+        return f"PendingPlateReview id={self.review_id} status={self.status}"

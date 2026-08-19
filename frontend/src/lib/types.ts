@@ -85,3 +85,17 @@ export interface OccupancyPoint {
   vendor_used: number;
   visitor_used: number;
 }
+
+export interface PendingReview {
+  review_id: number;
+  plate_guess: string | null;
+  confidence: number;
+  conf_pct: string;
+  vehicle_type: string | null;
+  event_type: 'entry' | 'exit';
+  zone: string;
+  status: 'queued' | 'auto_resolved' | 'needs_review' | 'reviewed' | 'dismissed';
+  captured_at: string;
+  resolved_at: string | null;
+  image_base64: string | null;
+}

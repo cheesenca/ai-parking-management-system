@@ -19,13 +19,14 @@ class Settings(BaseSettings):
     MODELS_DIR: Path = BASE_DIR / "models"
     LOGS_DIR: Path = BASE_DIR / "logs"
 
-    # Feature: Slot Occupancy 
+    # Feature: Slot Occupancy
     SLOT_ROOT: Path = FEATURES_DIR / "occupancy"
     SLOT_DATA_DIR: Path = SLOT_ROOT / "data"
     SLOT_PIPELINE_DIR: Path = SLOT_ROOT / "pipeline"
     PKLOT_DIR: Path = SLOT_PIPELINE_DIR / "dataset" / "pklot"
     CUSTOM_DATASET: Path = SLOT_PIPELINE_DIR / "dataset" / "custom" / "dataset"
     PARKING_MAP_JSON: Path = SLOT_ROOT / "data" / "parking_map.json"
+    OCCUPANCY_SNAPSHOT_INTERVAL_SEC: int = int(os.getenv("OCCUPANCY_SNAPSHOT_INTERVAL_SEC", "300"))
 
     # Feature: OCR 
     OCR_ROOT: Path = FEATURES_DIR / "ocr"
