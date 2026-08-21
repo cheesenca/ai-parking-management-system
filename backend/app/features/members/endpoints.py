@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -49,6 +50,27 @@ class MemberUpdate(BaseModel):
 
 class ImportRow(BaseModel):
     rows: List[MemberCreate]
+
+
+def _normalize_plate(plate: Optional[str]) -> Optional[str]:
+    """
+    Normalizes a license plate 
+    """
+    if plate is None:
+        return None
+    compact = re.sub(r"\s+", "", plate).upper()
+    if not compact:
+        return None
+
+    match = re.match(r"^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$", compact)
+    if match:
+        region, digits, series = match.groups()
+        parts = [region, digits]
+        if series:
+            parts.append(series)
+        return " ".join(parts)
+
+    return compact
 
 
 def _parse_date(s: Optional[str]) -> Optional[date]:
@@ -107,13 +129,16 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
     """
     Registering new members in the database, along with their vehicle details
     """
+    plate_1 = _normalize_plate(body.plate_1)
+    plate_2 = _normalize_plate(body.plate_2)
+
     if db.query(Member).filter(Member.kpk_number == body.kpk_number).first():
         logger.warning("Create member rejected: KPK '%s' already registered", body.kpk_number)
         raise HTTPException(status_code=409, detail=f"KPK '{body.kpk_number}' already registered")
     
-    if db.query(Vehicle).filter(Vehicle.plate_number == body.plate_1).first():
-        logger.warning("Create member rejected: plate '%s' already registered", body.plate_1)
-        raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' already registered")
+    if db.query(Vehicle).filter(Vehicle.plate_number == plate_1).first():
+        logger.warning("Create member rejected: plate '%s' already registered", plate_1)
+        raise HTTPException(status_code=409, detail=f"Plate '{plate_1}' already registered")
 
     member = Member(
         kpk_number=body.kpk_number,
@@ -126,18 +151,18 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
     db.flush()  
     db.add(Vehicle(
         member_id=member.member_id,
-        plate_number=body.plate_1,
+        plate_number=plate_1,
         vehicle_type=body.vehicle_type_1,
         stnk_exp=_parse_date(body.stnk_exp_1),
         user_category="Member",
     ))
 
-    if body.plate_2:
-        if db.query(Vehicle).filter(Vehicle.plate_number == body.plate_2).first():
-            raise HTTPException(status_code=409, detail=f"Plate 2 '{body.plate_2}' already registered")
+    if plate_2:
+        if db.query(Vehicle).filter(Vehicle.plate_number == plate_2).first():
+            raise HTTPException(status_code=409, detail=f"Plate 2 '{plate_2}' already registered")
         db.add(Vehicle(
             member_id=member.member_id,
-            plate_number=body.plate_2,
+            plate_number=plate_2,
             vehicle_type=body.vehicle_type_2 or "Car",
             user_category="Member",
         ))
@@ -170,16 +195,19 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
     if body.sim_exp is not None:
         member.sim_exp = _parse_date(body.sim_exp)
 
+    plate_1 = _normalize_plate(body.plate_1)
+    plate_2 = _normalize_plate(body.plate_2)
+
     v1 = member.vehicles[0] if member.vehicles else None
-    if v1 and body.plate_1:
+    if v1 and plate_1:
         conflict = db.query(Vehicle).filter(
-            Vehicle.plate_number == body.plate_1,
+            Vehicle.plate_number == plate_1,
             Vehicle.vehicle_id != v1.vehicle_id,
         ).first()
 
         if conflict:
-            raise HTTPException(status_code=409, detail=f"Plate '{body.plate_1}' already used by the other member")
-        v1.plate_number = body.plate_1
+            raise HTTPException(status_code=409, detail=f"Plate '{plate_1}' already used by the other member")
+        v1.plate_number = plate_1
 
     if v1 and body.vehicle_type_1: 
         v1.vehicle_type = body.vehicle_type_1
@@ -187,15 +215,21 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
     if v1 and body.stnk_exp_1 is not None: 
         v1.stnk_exp = _parse_date(body.stnk_exp_1)
 
-    if body.plate_2:
+    if plate_2:
         v2 = member.vehicles[1] if len(member.vehicles) > 1 else None
+        conflict = db.query(Vehicle).filter(
+            Vehicle.plate_number == plate_2,
+            Vehicle.vehicle_id != (v2.vehicle_id if v2 else -1),
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=409, detail=f"Plate '{plate_2}' already used by the other member")
         if v2:
-            v2.plate_number = body.plate_2
+            v2.plate_number = plate_2
             if body.vehicle_type_2: v2.vehicle_type = body.vehicle_type_2
         else:
             db.add(Vehicle(
                 member_id=member.member_id,
-                plate_number=body.plate_2,
+                plate_number=plate_2,
                 vehicle_type=body.vehicle_type_2 or "Car",
                 user_category="Member",
             ))
@@ -229,11 +263,14 @@ def import_members(body: ImportRow, db: Session = Depends(get_db)):
     errors: list[str] = []
     for row in body.rows:
         try:
+            plate_1 = _normalize_plate(row.plate_1)
+            plate_2 = _normalize_plate(row.plate_2)
+
             if db.query(Member).filter(Member.kpk_number == row.kpk_number).first():
                 errors.append(f"{row.kpk_number}: KPK already registered")
                 continue
-            if db.query(Vehicle).filter(Vehicle.plate_number == row.plate_1).first():
-                errors.append(f"{row.kpk_number}: Plate {row.plate_1} already registered")
+            if db.query(Vehicle).filter(Vehicle.plate_number == plate_1).first():
+                errors.append(f"{row.kpk_number}: Plate {plate_1} already registered")
                 continue
             member = Member(
                 kpk_number=row.kpk_number, name=row.name,
@@ -242,13 +279,13 @@ def import_members(body: ImportRow, db: Session = Depends(get_db)):
             )
             db.add(member); db.flush()
             db.add(Vehicle(
-                member_id=member.member_id, plate_number=row.plate_1,
+                member_id=member.member_id, plate_number=plate_1,
                 vehicle_type=row.vehicle_type_1, stnk_exp=_parse_date(row.stnk_exp_1),
                 user_category="Member",
             ))
-            if row.plate_2:
+            if plate_2:
                 db.add(Vehicle(
-                    member_id=member.member_id, plate_number=row.plate_2,
+                    member_id=member.member_id, plate_number=plate_2,
                     vehicle_type=row.vehicle_type_2 or "Car", user_category="Member",
                 ))
             created += 1

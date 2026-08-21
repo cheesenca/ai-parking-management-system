@@ -30,12 +30,20 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class RegisterRequest(BaseModel):
+class UserCreate(BaseModel):
     username: str
     email: str
     password: str
-    role: str = "Security" 
+    role: str = "Security"
     location: Optional[str] = "west"
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    role: Optional[str] = None
+    location: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -45,6 +53,14 @@ class ForgotPasswordRequest(BaseModel):
 
 class AuthUserResponse(BaseModel):
     username: str
+    role: str
+    location: Optional[str]
+
+
+class UserResponse(BaseModel):
+    admin_id: int
+    username: str
+    email: str
     role: str
     location: Optional[str]
 
@@ -104,6 +120,19 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+def require_admin(current_user: AdminUser = Depends(get_current_user)) -> AdminUser:
+    """
+    Dependency that restricts an endpoint to users with the 'Admin' role
+    """
+    if current_user.role != "Admin":
+        logger.warning("Forbidden: user '%s' (role=%s) attempted an admin-only action", current_user.username, current_user.role)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can manage user accounts",
+        )
+    return current_user
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
     """
@@ -136,33 +165,122 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
+@router.get("/users", response_model=list[UserResponse])
+def list_users(
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_admin),
+):
     """
-    Endpoint for registering a new administrator or security officer account
+    Admin-only: list all Admin/Security accounts for the User Management screen.
+    """
+    users = db.query(AdminUser).order_by(AdminUser.username.asc()).all()
+    return [
+        UserResponse(
+            admin_id=u.admin_id, username=u.username, email=u.email,
+            role=u.role, location=u.location,
+        )
+        for u in users
+    ]
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
+def create_user(
+    req: UserCreate,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin),
+):
+    """
+    Create a new Admin or Security account
     """
     existing_user = db.query(AdminUser).filter(
         (AdminUser.username == req.username) | (AdminUser.email == req.email)
     ).first()
-    
+
     if existing_user:
         logger.warning(
-            "Registration rejected: username/email already taken (username='%s', email='%s')",
+            "User creation rejected: username/email already taken (username='%s', email='%s')",
             req.username, req.email,
         )
         raise HTTPException(status_code=400, detail="Username or Email already registered")
-        
+
     new_admin = AdminUser(
         username=req.username,
         email=req.email,
         password=hash_password(req.password),
         role=req.role,
-        location=req.location
+        location=req.location if req.role != "Admin" else None,
     )
     db.add(new_admin)
     db.commit()
-    logger.info("New account registered: username='%s', role='%s'", req.username, req.role)
-    return {"message": "Registration successful"}
+    db.refresh(new_admin)
+    logger.info("New account created by admin '%s': username='%s', role='%s'", admin.username, req.username, req.role)
+    return UserResponse(
+        admin_id=new_admin.admin_id, username=new_admin.username, email=new_admin.email,
+        role=new_admin.role, location=new_admin.location,
+    )
+
+
+@router.put("/users/{admin_id}", response_model=UserResponse)
+def update_user(
+    admin_id: int,
+    req: UserUpdate,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin),
+):
+    """
+    Update an existing Admin/Security account's profile, role, or password.
+    """
+    target = db.query(AdminUser).filter(AdminUser.admin_id == admin_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if req.username and req.username != target.username:
+        if db.query(AdminUser).filter(AdminUser.username == req.username).first():
+            raise HTTPException(status_code=400, detail="Username already taken")
+        target.username = req.username
+
+    if req.email and req.email != target.email:
+        if db.query(AdminUser).filter(AdminUser.email == req.email).first():
+            raise HTTPException(status_code=400, detail="Email already taken")
+        target.email = req.email
+
+    if req.role:
+        target.role = req.role
+
+    if req.location is not None:
+        target.location = req.location if target.role != "Admin" else None
+
+    if req.password:
+        target.password = hash_password(req.password)
+
+    db.commit()
+    db.refresh(target)
+    logger.info("User '%s' updated by admin '%s'", target.username, admin.username)
+    return UserResponse(
+        admin_id=target.admin_id, username=target.username, email=target.email,
+        role=target.role, location=target.location,
+    )
+
+
+@router.delete("/users/{admin_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    admin_id: int,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin),
+):
+    """
+    Remove an Admin/Security account. Admins cannot delete their own account.
+    """
+    if admin_id == admin.admin_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+
+    target = db.query(AdminUser).filter(AdminUser.admin_id == admin_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db.delete(target)
+    db.commit()
+    logger.info("User '%s' deleted by admin '%s'", target.username, admin.username)
 
 
 @router.post("/forgot-password")

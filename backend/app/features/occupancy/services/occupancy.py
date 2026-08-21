@@ -105,7 +105,7 @@ def compute_iou(slot_polygon_pts: list, det_bbox: list) -> float:
         raise ImportError("shapely library not found")
 
     slot_poly = Polygon(slot_polygon_pts)
-    det_poly  = shapely_box(*det_bbox)
+    det_poly = shapely_box(*det_bbox)
 
     if not slot_poly.is_valid or not det_poly.is_valid:
         return 0.0
