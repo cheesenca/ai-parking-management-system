@@ -1,28 +1,18 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { AuthUser } from '@/lib/types';
+import type { AuthUser } from '@/types';
 import {
   apiLogin,
-  apiRegister,
   apiForgotPassword,
   clearSession,
   USER_KEY,
 } from '@/lib/backendApi';
 
-interface RegisterData {
-  username: string;
-  email: string;
-  password: string;
-  role?: string;
-  location?: string;
-}
-
 interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
-  register: (data: RegisterData) => Promise<{ ok: boolean; message: string }>;
   forgotPassword: (email: string, newPassword: string) => Promise<{ ok: boolean; message: string }>;
   logout: () => void;
 }
@@ -31,7 +21,6 @@ const AuthContext = createContext<AuthCtx>({
   user: null,
   loading: true,
   login: async () => false,
-  register: async () => ({ ok: false, message: '' }),
   forgotPassword: async () => ({ ok: false, message: '' }),
   logout: () => {},
 });
@@ -61,15 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (data: RegisterData) => {
-    try {
-      const res = await apiRegister(data);
-      return { ok: true, message: res.message };
-    } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : 'Registration Failed' };
-    }
-  };
-
   const forgotPassword = async (email: string, newPassword: string) => {
     try {
       const res = await apiForgotPassword(email, newPassword);
@@ -85,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, forgotPassword, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, forgotPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

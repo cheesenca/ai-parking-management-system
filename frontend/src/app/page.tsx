@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -52,7 +52,7 @@ export default function LoginPage() {
         }} />
       ))}
 
-      <div className="login-shell">
+      <div className="login-shell fadein">
         {/* Left brand panel */}
         <div className="login-brand" style={{
           background: 'linear-gradient(160deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.05) 100%)',
@@ -97,7 +97,7 @@ export default function LoginPage() {
             {[
               { icon: '🎯', text: 'YOLOv8 real-time detection' },
               { icon: '🔤', text: 'EasyOCR plate recognition' },
-              { icon: '📊', text: 'ARIMA/LSTM forecasting' },
+              { icon: '📊', text: 'Prophet forecasting' },
               { icon: '⚡', text: 'Live WebSocket updates' },
             ].map(f => (
               <div key={f.text} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -159,7 +159,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div style={{
+              <div className="fadein" style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 14px', borderRadius: 9,
                 background: 'var(--danger-bg)', border: '1px solid var(--red-mid)',
@@ -175,11 +175,13 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div style={{ marginTop: 28, textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/register" style={{ color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>
-              Sign up
-            </Link>
+          <div style={{
+            marginTop: 28, display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 12, color: 'var(--muted2)',
+          }}>
+            <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            Accounts are provisioned by an administrator
+            <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
         </div>
       </div>

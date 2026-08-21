@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
@@ -64,7 +64,7 @@ export default function ForgotPasswordPage() {
         }} />
       ))}
 
-      <div style={{
+      <div className="fadein" style={{
         width: '100%', maxWidth: 420, borderRadius: 20, overflow: 'hidden',
         boxShadow: '0 32px 80px rgba(0,0,0,.25)', position: 'relative',
         background: '#fff', padding: '44px 40px',

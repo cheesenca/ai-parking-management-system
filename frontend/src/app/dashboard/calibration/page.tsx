@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import type { Zone } from '@/lib/types';
+import { useAuth } from '@/context/AuthContext';
+import type { Zone } from '@/types';
 import {
   apiGetCalibrationSnapshot,
   apiGetCalibrationDefaults,
@@ -10,7 +10,7 @@ import {
   apiSaveCalibration,
   type CalibrationSlot,
 } from '@/lib/backendApi';
-import { Camera, Trash2, Save, RotateCcw, Loader2, CheckCircle2, Upload } from 'lucide-react';
+import { Camera, Trash2, Save, RotateCcw, Loader2, CheckCircle2, Upload, HelpCircle } from 'lucide-react';
 
 const zoneOptions: { value: Zone; label: string }[] = [
   { value: 'west', label: 'West Plant' },
@@ -35,6 +35,7 @@ export default function CalibrationPage() {
   const imgRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<'camera' | 'upload' | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const loadDefaultsOnly = async () => {
     setError(null);
@@ -218,25 +219,45 @@ export default function CalibrationPage() {
   return (
     <div className="page-pad fadein">
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>Slot Calibration</h1>
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-          Click the corner points of each parking slot directly on the camera image to fix its location permanently.
-          This eliminates identity "jitter" between slots in live detection, because slots are no longer determined
-          by the detection order of each frame, but by these fixed coordinates.
-        </p>
+        <div className="cal-title-row">
+          <h1 className="tr-title" style={{ marginBottom: 0 }}>Slot Calibration</h1>
+          <div className="cal-help-wrap">
+            <button
+              type="button"
+              className="cal-help-btn"
+              onClick={() => setShowHelp(s => !s)}
+              onBlur={() => setTimeout(() => setShowHelp(false), 150)}
+              aria-label="How slot calibration works"
+            >
+              <HelpCircle size={15} />
+            </button>
+            {showHelp && (
+              <div className="cal-help-popover">
+                Click the corner points of each parking slot directly on the camera image to fix its location permanently.
+                This eliminates identity &quot;jitter&quot; between slots in live detection, because slots are no longer determined
+                by the detection order of each frame, but by these fixed coordinates.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid-canvas">
         {/* Canvas */}
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
-            <select
-              value={zone}
-              onChange={e => setZone(e.target.value as Zone)}
-              style={{ padding: '8px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontWeight: 600 }}
-            >
-              {zoneOptions.map(z => <option key={z.value} value={z.value}>{z.label}</option>)}
-            </select>
+        <div className="card cal-canvas-card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="cal-toolbar">
+            <div className="tr-zone-toggle cal-zone-toggle">
+              {zoneOptions.map(z => (
+                <button
+                  key={z.value}
+                  type="button"
+                  className={`tr-zone-btn${zone === z.value ? ' active' : ''}`}
+                  onClick={() => setZone(z.value)}
+                >
+                  {z.label}
+                </button>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-secondary" onClick={loadSnapshot} disabled={loading}>
                 <Camera size={14} /> {loading ? 'Loading…' : 'Camera Snapshot'}
@@ -255,7 +276,7 @@ export default function CalibrationPage() {
           </div>
 
           {source === 'upload' && (
-            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)' }}>
+            <div className="cal-notice">
               Manually uploaded photo ({imgSize.width}×{imgSize.height}px). Make sure this photo was taken from the <b>exact same</b> camera
               angle &amp; position as the live feed — if the angle/cropping differs, the slot coordinates won't align with live detections.
             </div>
@@ -265,22 +286,33 @@ export default function CalibrationPage() {
             <canvas
               ref={canvasRef}
               onClick={handleCanvasClick}
-              style={{ width: '100%', height: 'auto', borderRadius: 10, border: '1px solid var(--border)', cursor: 'crosshair' }}
+              className="cal-canvas"
             />
           ) : (
-            <div style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }}>
-              {loading ? 'Fetching image from camera…' : 'No image yet. Click Camera Snapshot or Upload Photo.'}
+            <div className="cal-empty" style={{ flex: 1 }}>
+              {loading ? (
+                <>
+                  <Loader2 size={28} style={{ animation: 'spin 0.8s linear infinite' }} />
+                  <span>Fetching image from camera…</span>
+                </>
+              ) : (
+                <>
+                  <Camera size={28} />
+                  <span>No image yet</span>
+                  <span className="cal-empty-hint">Click &quot;Camera Snapshot&quot; or &quot;Upload Photo&quot; to get started</span>
+                </>
+              )}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <div className="cal-point-actions">
             <button className="btn-secondary" onClick={undoPoint} disabled={!currentPoints.length}>
               <RotateCcw size={14} /> Undo Point
             </button>
             <button className="btn-secondary" onClick={clearCurrent} disabled={!currentPoints.length}>
               <Trash2 size={14} /> Clear
             </button>
-            <button className="btn-primary" onClick={finishSlot} disabled={currentPoints.length < 3}>
+            <button className="btn-primary" onClick={finishSlot} disabled={currentPoints.length < 3} style={{ marginLeft: 'auto' }}>
               Save Slot Area ({currentPoints.length} points)
             </button>
           </div>
@@ -288,8 +320,9 @@ export default function CalibrationPage() {
 
         {/* Controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="card" style={{ padding: 18 }}>
-            <div className="label" style={{ marginBottom: 10 }}>Slot currently being drawn</div>
+          <div className="card cal-panel">
+            <div className="cal-panel-title">Slot currently being drawn</div>
+            <label className="cal-field-label">Slot ID</label>
             <select
               value={selectedSlotId}
               onChange={e => {
@@ -297,51 +330,56 @@ export default function CalibrationPage() {
                 const found = defaultSlots.find(s => s.id === e.target.value);
                 if (found) setCategory(found.category as 'Employee' | 'Vendor' | 'Visitor');
               }}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, marginBottom: 10 }}
+              className="cal-select"
             >
               {defaultSlots.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.id} {slots.some(x => x.id === s.id) ? '✓' : ''}
+                  {s.id} {slots.some(x => x.id === s.id) ? '✓ calibrated' : ''}
                 </option>
               ))}
             </select>
+            <label className="cal-field-label">Category</label>
             <select
               value={category}
               onChange={e => setCategory(e.target.value as 'Employee' | 'Vendor' | 'Visitor')}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13 }}
+              className="cal-select"
             >
               <option value="Employee">Employee</option>
               <option value="Vendor">Vendor</option>
               <option value="Visitor">Visitor</option>
             </select>
-            <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 10 }}>
-              Click 3–4 corner points of this slot on the image, then press "Save Slot Area".
+            <p className="cal-hint">
+              Click 3–4 corner points of this slot on the image, then press &quot;Save Slot Area&quot;.
             </p>
           </div>
 
-          <div className="card" style={{ padding: 18 }}>
-            <div className="label" style={{ marginBottom: 8 }}>
-              Progress: {slots.length} / {defaultSlots.length} slots
+          <div className="card cal-panel">
+            <div className="cal-progress-header">
+              <span className="cal-panel-title" style={{ marginBottom: 0 }}>Progress</span>
+              <span className="cal-progress-count">{slots.length} / {defaultSlots.length}</span>
             </div>
-            <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="cal-progress-track">
+              <div className="cal-progress-fill" style={{ width: defaultSlots.length ? `${(slots.length / defaultSlots.length) * 100}%` : '0%' }} />
+            </div>
+            <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 14 }}>
               {slots.map(s => (
-                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '5px 8px', borderRadius: 7, background: 'var(--bg)' }}>
+                <div key={s.id} className="cal-slot-row">
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{s.id} · {s.category}</span>
-                  <button onClick={() => removeSlot(s.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-text)' }}>
+                  <button onClick={() => removeSlot(s.id)} className="cal-slot-remove">
                     <Trash2 size={13} />
                   </button>
                 </div>
               ))}
-              {!slots.length && <div style={{ fontSize: 12, color: 'var(--muted)' }}>No slots calibrated yet.</div>}
+              {!slots.length && <div className="cal-empty-note">No slots calibrated yet.</div>}
             </div>
             {remaining.length > 0 && (
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+              <p className="cal-hint" style={{ marginTop: 10 }}>
                 Remaining: {remaining.length} slot(s) not yet calibrated.
               </p>
             )}
           </div>
 
-          {error && <div className="card" style={{ padding: 12, fontSize: 12.5, color: 'var(--danger-text)' }}>{error}</div>}
+          {error && <div className="cal-error">{error}</div>}
 
           <button
             className="btn-primary"

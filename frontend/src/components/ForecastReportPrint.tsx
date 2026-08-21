@@ -1,7 +1,7 @@
 'use client';
 
-import type { ZoneCapacity } from '@/lib/types';
-import { ZONE_KEYS, ZONE_LABELS, statusFor, toISO, addDays, monthRange, type ZoneKey, type MergedRow } from '@/app/dashboard/Analytics';
+import type { ZoneCapacity } from '@/types';
+import { ZONE_KEYS, ZONE_LABELS, statusFor, toISO, addDays, monthRange, type ZoneKey, type MergedRow } from '@/app/dashboard/analytics/page';
 
 interface Props {
   merged: MergedRow[];

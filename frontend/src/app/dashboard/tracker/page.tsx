@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import type { Zone } from '@/lib/types';
-import { useLiveDetection, useSlotOccupancy, useSlotDetection } from '@/lib/api';
-import { Wifi, WifiOff, Cpu, Settings } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import type { Zone } from '@/types';
+import { useLiveDetection } from '@/hooks/useLiveDetection';
+import { useSlotOccupancy } from '@/hooks/useSlotOccupancy';
+import { useSlotDetection } from '@/hooks/useSlotDetection';
+import { Wifi, WifiOff, Cpu, Settings, LogIn, LogOut, MapPin } from 'lucide-react';
 import ConnPill from '@/components/ConnPill';
 import LiveDetection from '@/components/LiveDetection';
 import SlotDetectionCamera from '@/components/SlotDetectionCamera';
@@ -44,10 +46,10 @@ export default function TrackerPage() {
   return (
     <div className="page-pad fadein">
       {/* HEADER UTAMA */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+      <div className="tr-header">
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Parking Tracker</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>Live AI vehicle detection &amp; real-time slot vacancy at guard post</p>
+          <h1 className="tr-title">Parking Tracker</h1>
+          <p className="tr-subtitle">Live AI vehicle detection &amp; real-time slot vacancy at guard post</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ConnPill label="LPR CAMERA" state={lpr.conn} icon={lpr.conn === 'live' ? Wifi : WifiOff} />
@@ -58,7 +60,7 @@ export default function TrackerPage() {
       {/* 1. GRID KIRI & KANAN (Sejajar sampai Live Slot Map) */}
       <div className="grid-2" style={{ marginBottom: 20 }}>
         {/* KOLOM KIRI: Live Detection (YOLOv8 + EasyOCR) */}
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
           <LiveDetection lpr={lpr} selectedZone={selectedZone} />
         </div>
 
@@ -68,18 +70,23 @@ export default function TrackerPage() {
           <SlotDetectionCamera detection={slotDetection} />
           
           {/* Post Location ditukar ke bawah Slot Detection */}
-          <div className="card" style={{ padding: 18 }}>
-            <div className="label" style={{ marginBottom: 8 }}>Post Location</div>
-            <select
-              value={selectedZone}
-              onChange={e => setSelectedZone(e.target.value as Zone)}
-              disabled={user?.role === 'Security'}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--ink)', fontSize: 13, outline: 'none', fontFamily: 'var(--font-body)', fontWeight: 600, cursor: user?.role === 'Security' ? 'not-allowed' : 'pointer' }}
-            >
-              {zoneOptions.map(z => <option key={z.value} value={z.value}>{z.label}</option>)}
-            </select>
+          <div className="card tr-zone-card">
+            <div className="label tr-zone-label"><MapPin size={12} /> Post Location</div>
+            <div className="tr-zone-toggle">
+              {zoneOptions.map(z => (
+                <button
+                  key={z.value}
+                  type="button"
+                  disabled={user?.role === 'Security'}
+                  className={`tr-zone-btn${selectedZone === z.value ? ' active' : ''}`}
+                  onClick={() => setSelectedZone(z.value)}
+                >
+                  {z.label}
+                </button>
+              ))}
+            </div>
             {user?.role === 'Security' && (
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Zone locked to assigned post.</p>
+              <p className="tr-zone-hint">Zone locked to assigned post.</p>
             )}
           </div>
 
@@ -94,15 +101,21 @@ export default function TrackerPage() {
         <CategoryStats slots={slots} />
         
         {/* Kartu Status & Set Capacity (Diperluas) */}
-        <div className="card" style={{ padding: 24 }}> {/* Padding diperbesar */}
+        <div className="card" style={{ padding: 24 }}>
           <div className="grid-2" style={{ gap: 16 }}>
-            <div style={{ padding: 18, borderRadius: 12, background: 'var(--green-bg)', border: '1px solid #6EE7B7' }}>
-              <div className="label" style={{ color: 'var(--green-text)', marginBottom: 8, fontSize: 12 }}>Latest In</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--green-text)' }}>{latestIn}</div>
+            <div className="tr-stat-card tr-stat-in">
+              <div className="tr-stat-icon"><LogIn size={16} /></div>
+              <div>
+                <div className="tr-stat-label">Latest In</div>
+                <div className="tr-stat-value">{latestIn}</div>
+              </div>
             </div>
-            <div style={{ padding: 18, borderRadius: 12, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)' }}>
-              <div className="label" style={{ color: 'var(--danger-text)', marginBottom: 8, fontSize: 12 }}>Latest Out</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--danger-text)' }}>{latestOut}</div>
+            <div className="tr-stat-card tr-stat-out">
+              <div className="tr-stat-icon"><LogOut size={16} /></div>
+              <div>
+                <div className="tr-stat-label">Latest Out</div>
+                <div className="tr-stat-value">{latestOut}</div>
+              </div>
             </div>
           </div>
           {user?.role === 'Admin' && (

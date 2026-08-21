@@ -1,12 +1,13 @@
 import type {
   AuthUser,
   Member,
+  ManagedUser,
   EntryLog,
   ZoneCapacity,
   ForecastDay,
   OccupancyPoint,
   PendingReview,
-} from './types';
+} from '@/types';
 
 const BASE =
   typeof window !== 'undefined'
@@ -50,7 +51,6 @@ async function apiFetch<T>(
     if (typeof detail === 'string' && detail) {
       message = detail;
     } else if (Array.isArray(detail)) {
-      // FastAPI validation errors: a list of {loc, msg, type} objects
       message = detail.map(d => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join('; ');
     } else if (detail && typeof detail === 'object') {
       message = JSON.stringify(detail);
@@ -90,20 +90,6 @@ export async function apiLogin(
   return data.user;
 }
 
-export async function apiRegister(data: {
-  username: string;
-  email: string;
-  password: string;
-  role?: string;
-  location?: string;
-}): Promise<{ message: string }> {
-  return apiFetch<{ message: string }>(
-    '/api/v1/auth/register',
-    { method: 'POST', body: JSON.stringify(data) },
-    true,
-  );
-}
-
 export async function apiForgotPassword(
   email: string,
   new_password: string,
@@ -113,6 +99,37 @@ export async function apiForgotPassword(
     { method: 'POST', body: JSON.stringify({ email, new_password }) },
     true,
   );
+}
+
+export async function apiGetUsers(): Promise<ManagedUser[]> {
+  return apiFetch<ManagedUser[]>('/api/v1/auth/users');
+}
+
+export async function apiCreateUser(data: {
+  username: string;
+  email: string;
+  password: string;
+  role: string;
+  location?: string;
+}): Promise<ManagedUser> {
+  return apiFetch<ManagedUser>('/api/v1/auth/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiUpdateUser(
+  admin_id: number,
+  data: Partial<{ username: string; email: string; password: string; role: string; location: string }>,
+): Promise<ManagedUser> {
+  return apiFetch<ManagedUser>(`/api/v1/auth/users/${admin_id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function apiDeleteUser(admin_id: number): Promise<void> {
+  return apiFetch<void>(`/api/v1/auth/users/${admin_id}`, { method: 'DELETE' });
 }
 
 export async function apiGetMembers(params?: {

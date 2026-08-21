@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { ScanLine, CheckCircle, XCircle, AlertTriangle, Camera } from 'lucide-react';
-import { type Zone } from '@/lib/types';
+import { type Zone } from '@/types';
 import ManualApprovalModal from './ManualApprovalModal';
 
 type Status = 'idle' | 'scanning' | 'granted' | 'denied' | 'wrong_loc';
@@ -49,8 +49,8 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
   ];
 
   return (
-    <div className="card" style={{ padding: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+    <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div className="card-title">Live Detection (YOLOv8 + EasyOCR)</div>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', background: 'var(--bg)', border: '1px solid var(--border)', padding: '3px 9px', borderRadius: 6 }}>
           #{lpr.scanCount.toString().padStart(4, '0')}
@@ -58,7 +58,7 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
       </div>
 
       {/* Camera feed */}
-      <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', background: '#0B1220', aspectRatio: '16 / 9', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', background: '#0B1220', aspectRatio: '16 / 9', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {lpr.frame ? (
           <img src={lpr.frame} alt="camera feed" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
@@ -87,7 +87,7 @@ export default function LiveDetection({ lpr, selectedZone }: { lpr: any; selecte
       </div>
 
       {/* Auto-filled fields */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12.5 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12.5, flex: 1 }}>
         {fields.map((f) => (
           <div key={f.label}>
             <div className="label" style={{ marginBottom: 5 }}>{f.label}</div>

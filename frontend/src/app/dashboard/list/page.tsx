@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { EntryLog } from '@/lib/types';
+import type { EntryLog } from '@/types';
 import { apiGetLogs } from '@/lib/backendApi';
-import { useAuth } from '@/lib/AuthContext';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { ChevronLeft, ChevronRight, RefreshCw, LogIn, LogOut, ShieldAlert, Inbox } from 'lucide-react';
 
 type Tab = 'Entry' | 'Exit' | 'Denied';
 const PER_PAGE = 8;
@@ -71,10 +71,10 @@ export default function ParkingListPage() {
 
   return (
     <div className="page-pad fadein">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div className="lst-header">
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Parking List</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>Real-time vehicle entry and exit logs</p>
+          <h1 className="tr-title">Parking List</h1>
+          <p className="tr-subtitle">Real-time vehicle entry and exit logs</p>
         </div>
         <button onClick={() => { void fetchLogs(); }} className="btn-secondary" style={{ fontSize: 12 }} disabled={loading}>
           <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
@@ -90,49 +90,54 @@ export default function ParkingListPage() {
       {/* Summary */}
       <div className="grid-3" style={{ gap: 14, marginBottom: 22 }}>
         {[
-          { label: 'Total Entry', value: ins.length, color: 'var(--green-text)', bg: 'var(--green-bg)', border: '#6EE7B7' },
-          { label: 'Total Exit', value: outs.length, color: 'var(--danger-text)', bg: 'var(--danger-bg)', border: 'var(--red-mid)' },
-          { label: 'Denied', value: denied.length, color: 'var(--warn-text)', bg: 'var(--warn-bg)', border: '#FDE68A' },
-        ].map(s => (
-          <div key={s.label} style={{ padding: '16px 18px', borderRadius: 12, background: s.bg, border: `1px solid ${s.border}` }}>
-            <div className="label" style={{ color: s.color, marginBottom: 6 }}>{s.label}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 700, color: s.color }}>
-              {loading ? '—' : s.value}
+          { label: 'Total Entry', value: ins.length, icon: LogIn, cls: 'lst-sum-in' },
+          { label: 'Total Exit', value: outs.length, icon: LogOut, cls: 'lst-sum-out' },
+          { label: 'Denied', value: denied.length, icon: ShieldAlert, cls: 'lst-sum-denied' },
+        ].map(s => {
+          const Icon = s.icon;
+          return (
+            <div key={s.label} className={`lst-sum-card ${s.cls}`}>
+              <div className="lst-sum-icon"><Icon size={16} /></div>
+              <div>
+                <div className="lst-sum-label">{s.label}</div>
+                <div className="lst-sum-value">{loading ? '—' : s.value}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Tab */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 18, padding: 4, background: '#fff', border: '1px solid var(--border)', borderRadius: 10, width: 'fit-content', boxShadow: 'var(--shadow-sm)' }}>
+      <div className="lst-tabs">
         {(['Entry', 'Exit', 'Denied'] as Tab[]).map(t => (
-          <button key={t} onClick={() => { setTab(t); setPage(1); }} style={{
-            padding: '7px 18px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 700,
-            background: tab === t ? 'var(--red)' : 'transparent',
-            color: tab === t ? '#fff' : 'var(--muted)', cursor: 'pointer',
-          }}>{t}</button>
+          <button key={t} onClick={() => { setTab(t); setPage(1); }} className={`lst-tab-btn${tab === t ? ' active' : ''}`}>{t}</button>
         ))}
       </div>
 
       {/* Table */}
       <div className="card" style={{ overflow: 'hidden', marginBottom: 18 }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: tab === 'Entry' ? 'var(--teal)' : tab === 'Exit' ? 'var(--red)' : 'var(--amber)', display: 'inline-block' }} />
-          <span style={{ fontWeight: 800, fontSize: 12, color: 'var(--ink)', letterSpacing: '.04em' }}>{tab.toUpperCase()} LOG</span>
-          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{filtered.length} records</span>
+        <div className="lst-table-head">
+          <span className={`lst-dot lst-dot-${tab.toLowerCase()}`} />
+          <span className="lst-table-title">{tab.toUpperCase()} LOG</span>
+          <span className="lst-table-count">{filtered.length} records</span>
         </div>
 
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Memuat log…</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
+            <table className="data-table lst-table">
               <thead><tr>
                 <th>Plate</th><th>Name</th><th>KPK</th><th>Time</th><th>Zone</th><th>Cat.</th><th>Auth</th><th>Conf.</th>
               </tr></thead>
               <tbody>
                 {paged.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>No data available</td></tr>
+                  <tr><td colSpan={8}>
+                    <div className="lst-empty">
+                      <Inbox size={22} />
+                      <span>No data available</span>
+                    </div>
+                  </td></tr>
                 ) : paged.map(l => (
                   <tr key={l.log_id}>
                     <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>{l.plate_detected}</span></td>
@@ -152,7 +157,7 @@ export default function ParkingListPage() {
       </div>
 
       {/* Pagination */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 20 }}>
+      <div className="lst-pagination">
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>
           Showing {Math.min((page - 1) * PER_PAGE + 1, filtered.length)}–{Math.min(page * PER_PAGE, filtered.length)} of {filtered.length}
         </span>
@@ -161,13 +166,7 @@ export default function ParkingListPage() {
             <ChevronLeft size={13} />
           </button>
           {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(n => (
-            <button key={n} onClick={() => setPage(n)} style={{
-              padding: '5px 11px', borderRadius: 7, border: '1px solid',
-              borderColor: page === n ? 'var(--red)' : 'var(--border)',
-              background: page === n ? 'var(--red)' : '#fff',
-              color: page === n ? '#fff' : 'var(--text)',
-              cursor: 'pointer', fontSize: 12, fontWeight: 700,
-            }}>{n}</button>
+            <button key={n} onClick={() => setPage(n)} className={`lst-page-btn${page === n ? ' active' : ''}`}>{n}</button>
           ))}
           <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary" style={{ padding: '5px 9px' }}>
             <ChevronRight size={13} />
@@ -177,12 +176,12 @@ export default function ParkingListPage() {
 
       {/* Denied events */}
       {!loading && denied.length > 0 && (
-        <div style={{ padding: '16px 18px', borderRadius: 12, background: 'var(--danger-bg)', border: '1px solid var(--red-mid)' }}>
-          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--danger-text)', marginBottom: 12 }}>
+        <div className="lst-denied-panel">
+          <div className="lst-denied-title">
             Access Denied Events — {denied.length} entries
           </div>
           {denied.slice(0, 5).map(l => (
-            <div key={l.log_id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 12px', borderRadius: 8, background: '#fff', border: '1px solid var(--red-mid)', marginBottom: 8 }}>
+            <div key={l.log_id} className="lst-denied-row">
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--red)' }}>{l.plate_detected}</span>
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>{l.zone?.toUpperCase()} · {l.time_scan}</span>
               <div style={{ flex: 1 }}><ConfBar score={l.confidence_score} /></div>

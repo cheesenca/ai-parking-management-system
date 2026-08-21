@@ -26,6 +26,14 @@ export interface AuthUser {
   location: Zone | null;
 }
 
+export interface ManagedUser {
+  admin_id: number;
+  username: string;
+  email: string;
+  role: Role;
+  location: Zone | null;
+}
+
 export interface ZoneCapacity {
   zone: Zone;
   zone_name: string;

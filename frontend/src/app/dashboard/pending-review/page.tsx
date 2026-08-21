@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { PendingReview } from '@/lib/types';
-import type { Detection } from '@/lib/api';
+import type { PendingReview } from '@/types';
+import type { Detection } from '@/hooks/useLiveDetection';
 import { apiGetPendingReviews } from '@/lib/backendApi';
-import { useAuth } from '@/lib/AuthContext';
-import { ChevronLeft, ChevronRight, RefreshCw, ImageOff } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { ChevronLeft, ChevronRight, RefreshCw, ImageOff, Inbox } from 'lucide-react';
 import ManualApprovalModal from '@/components/ManualApprovalModal';
 
 const PAGE_SIZE = 8;
@@ -76,10 +76,10 @@ export default function PendingReviewPage() {
 
   return (
     <div className="page-pad fadein">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div className="lst-header">
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Pending Review</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+          <h1 className="tr-title">Pending Review</h1>
+          <p className="tr-subtitle">
             Low-confidence detections the automatic reread couldn&apos;t resolve — approve or dismiss each one.
           </p>
         </div>
@@ -95,23 +95,28 @@ export default function PendingReviewPage() {
       )}
 
       <div className="card" style={{ overflow: 'hidden', marginBottom: 18 }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--amber)', display: 'inline-block' }} />
-          <span style={{ fontWeight: 800, fontSize: 12, color: 'var(--ink)', letterSpacing: '.04em' }}>NEEDS REVIEW</span>
-          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{total} records</span>
+        <div className="lst-table-head">
+          <span className="lst-dot lst-dot-denied" />
+          <span className="lst-table-title">NEEDS REVIEW</span>
+          <span className="lst-table-count">{total} records</span>
         </div>
 
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
+            <table className="data-table lst-table">
               <thead><tr>
                 <th>Image</th><th>Plate Guess</th><th>Vehicle</th><th>Zone</th><th>Direction</th><th>Captured</th><th>Conf.</th><th></th>
               </tr></thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: 'var(--muted)' }}>Nothing waiting on review right now.</td></tr>
+                  <tr><td colSpan={8}>
+                    <div className="lst-empty">
+                      <Inbox size={22} />
+                      <span>Nothing waiting on review right now.</span>
+                    </div>
+                  </td></tr>
                 ) : rows.map(r => (
                   <tr key={r.review_id}>
                     <td>
@@ -119,10 +124,10 @@ export default function PendingReviewPage() {
                         <img
                           src={`data:image/jpeg;base64,${r.image_base64}`}
                           alt="Captured plate"
-                          style={{ width: 56, height: 40, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }}
+                          className="pr-thumb"
                         />
                       ) : (
-                        <div style={{ width: 56, height: 40, borderRadius: 6, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted2)' }}>
+                        <div className="pr-thumb pr-thumb-empty">
                           <ImageOff size={14} />
                         </div>
                       )}
@@ -146,7 +151,7 @@ export default function PendingReviewPage() {
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 20 }}>
+      <div className="lst-pagination">
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>
           Showing {total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
         </span>
@@ -155,13 +160,7 @@ export default function PendingReviewPage() {
             <ChevronLeft size={13} />
           </button>
           {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(n => (
-            <button key={n} onClick={() => setPage(n)} style={{
-              padding: '5px 11px', borderRadius: 7, border: '1px solid',
-              borderColor: page === n ? 'var(--red)' : 'var(--border)',
-              background: page === n ? 'var(--red)' : '#fff',
-              color: page === n ? '#fff' : 'var(--text)',
-              cursor: 'pointer', fontSize: 12, fontWeight: 700,
-            }}>{n}</button>
+            <button key={n} onClick={() => setPage(n)} className={`lst-page-btn${page === n ? ' active' : ''}`}>{n}</button>
           ))}
           <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary" style={{ padding: '5px 9px' }}>
             <ChevronRight size={13} />

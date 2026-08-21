@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, Settings, Loader2 } from 'lucide-react';
-import type { Zone, Category } from '@/lib/types';
+import type { Zone, Category } from '@/types';
 import { apiUpdateZoneCapacity } from '@/lib/backendApi';
 import ModalPortal from './ModalPortal';
 
@@ -68,14 +68,12 @@ export default function SetCapacityModal({ zone, currentSummary, onClose }: Prop
   return (
     <ModalPortal>
     <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-      }}
+      className="mem-modal-overlay"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
       onClick={onClose}
     >
       <div
-        className="card"
+        className="card fadein"
         style={{ width: 420, maxWidth: '92vw', padding: 24 }}
         onClick={e => e.stopPropagation()}
       >

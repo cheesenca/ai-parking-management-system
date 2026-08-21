@@ -1,6 +1,6 @@
 'use client'
 
-import { type Category } from '@/lib/types';
+import { type Category } from '@/types';
 
 export default function CategoryStats({ slots }: { slots: any }) {
   const catColor = (used: number, total: number) => {
@@ -25,7 +25,7 @@ export default function CategoryStats({ slots }: { slots: any }) {
         {categories.map((cat) => {
           const info = slots.summary[cat] || { used: 0, total: 0, available: 0, rate_pct: 0 };
           return (
-            <div key={cat} style={{ textAlign: 'center', padding: '18px 12px', borderRadius: 12, background: catBg(info.used, info.total), border: `1px solid ${catBorder(info.used, info.total)}` }}>
+            <div key={cat} className="cat-stat-card" style={{ textAlign: 'center', padding: '18px 12px', borderRadius: 12, background: catBg(info.used, info.total), border: `1px solid ${catBorder(info.used, info.total)}` }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: catColor(info.used, info.total) }}>{info.available}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: catColor(info.used, info.total), marginTop: 4 }}>{cat}</div>
               <div style={{ fontSize: 11, color: catColor(info.used, info.total), opacity: .8, marginTop: 2 }}>{info.used}/{info.total} used</div>

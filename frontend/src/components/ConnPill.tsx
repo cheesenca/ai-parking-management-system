@@ -1,6 +1,6 @@
 'use client'
 
-import { type ConnState } from '@/lib/api';
+import { type ConnState } from '@/hooks/useLiveDetection';
 import { LucideIcon } from 'lucide-react';
 
 export default function ConnPill({ label, state, icon: Icon }: { label: string; state: ConnState; icon: LucideIcon }) {

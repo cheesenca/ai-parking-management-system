@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AlertTriangle, HelpCircle, FileText, X, Flame, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { apiForecastZones, apiForecastDashboard } from '@/lib/backendApi';
-import type { ZoneCapacity, ForecastDay } from '@/lib/types';
+import type { ZoneCapacity, ForecastDay } from '@/types';
 import ForecastReportPrint from '@/components/ForecastReportPrint';
 
 export type ZoneKey = 'west' | 'east' | 'eastwest';

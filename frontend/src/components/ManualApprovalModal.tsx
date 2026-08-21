@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { X, ShieldCheck, Loader2 } from 'lucide-react';
-import type { Zone } from '@/lib/types';
-import type { Detection } from '@/lib/api';
+import type { Zone } from '@/types';
+import type { Detection } from '@/hooks/useLiveDetection';
 import { apiManualApprovePlate, apiDismissPendingReview } from '@/lib/backendApi';
 import ModalPortal from './ModalPortal';
 
@@ -74,12 +74,10 @@ export default function ManualApprovalModal({ detection, zone, reviewId, imageBa
   return (
     <ModalPortal>
     <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-      }}
+      className="mem-modal-overlay"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
     >
-      <div className="card" style={{ width: 420, maxWidth: '92vw', padding: 24 }}>
+      <div className="card fadein" style={{ width: 420, maxWidth: '92vw', padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <ShieldCheck size={16} />

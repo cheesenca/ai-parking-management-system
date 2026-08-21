@@ -11,18 +11,9 @@ export default function SlotMap({ slots }: { slots: any }) {
           {slots.occupied}/{slots.total} occupied · {rate}%
         </span>
       </div>
-      <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', background: '#0E1726' }}>
+      <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', background: '#000' }}>
         <svg viewBox={`0 0 ${slots.map.frame.w} ${slots.map.frame.h}`} style={{ width: '100%', display: 'block' }}>
-          <rect x={0} y={0} width={slots.map.frame.w} height={slots.map.frame.h} fill="#0E1726" />
-          {slots.map.background && (
-            <image
-              href={slots.map.background}
-              x={0} y={0}
-              width={slots.map.frame.w} height={slots.map.frame.h}
-              preserveAspectRatio="xMidYMid slice"
-              opacity={0.9}
-            />
-          )}
+          <rect x={0} y={0} width={slots.map.frame.w} height={slots.map.frame.h} fill="#000" />
           {slots.map.slots.map((s: any) => {
             const occ = slots.slotStatus[s.id] === 'Occupied';
             const pts = s.polygon.map((p: any) => p.join(',')).join(' ');

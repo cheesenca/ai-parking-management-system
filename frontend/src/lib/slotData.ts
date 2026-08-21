@@ -1,4 +1,4 @@
-import type { Zone, Category } from './types';
+import type { Zone, Category } from '@/types';
 
 export type SlotStatus = 'Occupied' | 'Available';
 

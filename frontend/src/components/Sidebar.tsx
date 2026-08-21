@@ -3,40 +3,41 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import { apiIsOnline, apiGetPendingReviews } from '@/lib/backendApi';
-import { ScanLine, ClipboardList, Users, BarChart2, LogOut, Car, Crosshair, AlertCircle, X } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { apiGetPendingReviews } from '@/lib/backendApi';
+import { ScanLine, ClipboardList, Users, UserCog, BarChart2, LogOut, Car, Crosshair, AlertCircle, ChevronDown } from 'lucide-react';
 
-const navItems = [
-  { href: '/dashboard/tracker', label: 'Parking Tracer', icon: ScanLine, roles: ['Admin', 'Security'] },
-  { href: '/dashboard/list', label: 'Parking List', icon: ClipboardList, roles: ['Admin', 'Security'] },
-  { href: '/dashboard/pending-review', label: 'Pending Review', icon: AlertCircle, roles: ['Admin', 'Security'] },
-  { href: '/dashboard/members', label: 'Members', icon: Users, roles: ['Admin'] },
-  { href: '/dashboard/analytics',label: 'Analytics', icon: BarChart2, roles: ['Admin'] },
-  { href: '/dashboard/calibration', label: 'Slot Calibration', icon: Crosshair, roles: ['Admin'] },
+const navGroups = [
+  {
+    label: 'Operations',
+    items: [
+      { href: '/dashboard/tracker', label: 'Parking Tracer', icon: ScanLine, roles: ['Admin', 'Security'] },
+      { href: '/dashboard/list', label: 'Parking List', icon: ClipboardList, roles: ['Admin', 'Security'] },
+      { href: '/dashboard/pending-review', label: 'Pending Review', icon: AlertCircle, roles: ['Admin', 'Security'] },
+    ],
+  },
+  {
+    label: 'Management',
+    items: [
+      { href: '/dashboard/members', label: 'Members', icon: Users, roles: ['Admin'] },
+      { href: '/dashboard/users', label: 'User Management', icon: UserCog, roles: ['Admin'] },
+    ],
+  },
+  {
+    label: 'Insights & Setup',
+    items: [
+      { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart2, roles: ['Admin'] },
+      { href: '/dashboard/calibration', label: 'Slot Calibration', icon: Crosshair, roles: ['Admin'] },
+    ],
+  },
 ];
 
 export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      const online = await apiIsOnline();
-      if (!cancelled) setBackendOnline(online);
-    };
-    check();
-    const interval = setInterval(check, 10_000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -56,101 +57,88 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
   }, [user]);
 
   const handleLogout = () => { logout(); router.push('/'); };
-  const allowed = navItems.filter(n => user && n.roles.includes(user.role));
+  const groups = navGroups
+    .map(g => ({ ...g, items: g.items.filter(n => user && n.roles.includes(user.role)) }))
+    .filter(g => g.items.length > 0);
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    // Ensure the group containing the active route is expanded.
+    const activeGroup = navGroups.find(g => g.items.some(i => i.href === pathname));
+    if (activeGroup) setOpenGroups(prev => (prev[activeGroup.label] === false ? prev : { ...prev, [activeGroup.label]: true }));
+  }, [pathname]);
+  const isGroupOpen = (label: string) => openGroups[label] !== false; // default open
+  const toggleGroup = (label: string) => setOpenGroups(prev => ({ ...prev, [label]: !isGroupOpen(label) }));
+
+  const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : '--';
 
   return (
-    <aside className={`app-sidebar${mobileOpen ? ' mobile-open' : ''}`}>
+    <aside className={`app-sidebar sb${mobileOpen ? ' mobile-open' : ''}`}>
       {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, var(--red) 0%, var(--red-dark) 60%, var(--red-deep) 100%)',
-        padding: '20px 20px 18px', position: 'relative',
-      }}>
-        <button
-          onClick={onClose}
-          className="app-sidebar-close"
-          style={{
-            position: 'absolute', top: 14, right: 14, background: 'rgba(255,255,255,.15)',
-            border: '1px solid rgba(255,255,255,.3)', borderRadius: 8, color: '#fff',
-            width: 28, height: 28, alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-          }}
-        >
-          <X size={15} />
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 9,
-            background: 'rgba(255,255,255,.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid rgba(255,255,255,.25)',
-          }}>
-            <Car size={17} color="#fff" />
+      <div className="sb-header">
+        <div className="sb-brand">
+          <div className="sb-brand-icon">
+            <Car size={20} color="#fff" />
           </div>
           <div>
-            <div style={{ color: '#fff', fontWeight: 800, fontSize: 15, letterSpacing: '-0.01em' }}>AIPS</div>
-            <div style={{ color: 'rgba(255,255,255,.65)', fontSize: 10, fontWeight: 500, letterSpacing: '.05em' }}>AI PARKING SYSTEM</div>
+            <div className="sb-brand-name">AIPS</div>
+            <div className="sb-brand-sub">AI Parking System</div>
           </div>
-        </div>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span
-            className="pulse-dot"
-            style={{ background: backendOnline ? '#4ade80' : backendOnline === false ? '#FCA5A5' : 'rgba(255,255,255,.4)' }}
-          />
-          <span style={{ color: 'rgba(255,255,255,.8)', fontSize: 10, fontWeight: 600, letterSpacing: '.05em' }}>
-            {backendOnline === null ? 'CONNECTING…' : backendOnline ? 'LIVE MONITORING' : 'DEMO MODE'}
-          </span>
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '10px 10px' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted2)', padding: '8px 10px 6px' }}>
-          Menu
-        </div>
-        {allowed.map(item => {
-          const active = pathname === item.href;
+      <nav className="sb-nav">
+        {groups.map((group) => {
+          const open = isGroupOpen(group.label);
           return (
-            <Link key={item.href} href={item.href} onClick={onClose} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 12px', borderRadius: 9, marginBottom: 2,
-              fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--red)' : 'var(--text)',
-              background: active ? 'var(--red-soft)' : 'transparent',
-              border: active ? '1px solid var(--red-mid)' : '1px solid transparent',
-              textDecoration: 'none', transition: 'all .15s',
-            }}>
-              <item.icon size={15} style={{ color: active ? 'var(--red)' : 'var(--muted)', flexShrink: 0 }} />
-              {item.label}
-              {item.href === '/dashboard/pending-review' && pendingCount > 0 && (
-                <span style={{
-                  marginLeft: 'auto', minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
-                  background: 'var(--red)', color: '#fff', fontSize: 10, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {pendingCount > 99 ? '99+' : pendingCount}
-                </span>
-              )}
-            </Link>
+            <div key={group.label} className="sb-nav-group">
+              <button type="button" className="sb-nav-label sb-nav-group-toggle" onClick={() => toggleGroup(group.label)}>
+                <span>{group.label}</span>
+                <ChevronDown size={12} className={`sb-group-chevron${open ? ' open' : ''}`} />
+              </button>
+              <div className={`sb-nav-group-items${open ? ' open' : ''}`}>
+                <div className="sb-nav-group-inner">
+                  {group.items.map(item => {
+                    const active = pathname === item.href;
+                    const Icon = item.icon;
+                    return (
+                      <Link key={item.href} href={item.href} onClick={onClose} className={`sb-nav-item${active ? ' active' : ''}`}>
+                        <span className="sb-nav-indicator" />
+                        <Icon size={16} className="sb-nav-icon" />
+                        <span className="sb-nav-label-text">{item.label}</span>
+                        {item.href === '/dashboard/pending-review' && pendingCount > 0 && (
+                          <span className="sb-badge">{pendingCount > 99 ? '99+' : pendingCount}</span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           );
         })}
       </nav>
 
       {/* User footer */}
-      <div style={{ padding: '14px 14px', borderTop: '1px solid var(--border)' }}>
+      <div className="sb-footer">
         {user && (
-          <div style={{
-            padding: '10px 12px', borderRadius: 9,
-            background: 'var(--bg)', border: '1px solid var(--border)',
-            marginBottom: 10,
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{user.username}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              {user.role}{user.location ? ` · ${user.location.toUpperCase()}` : ''}
+          <button className="sb-user-card" onClick={() => setUserMenuOpen(o => !o)}>
+            <div className="sb-avatar">{initials}</div>
+            <div className="sb-user-info">
+              <div className="sb-user-name">{user.username}</div>
+              <div className="sb-user-role">
+                {user.role}{user.location ? ` · ${user.location.toUpperCase()}` : ''}
+              </div>
             </div>
-          </div>
+            <ChevronDown size={14} className={`sb-chevron${userMenuOpen ? ' open' : ''}`} />
+          </button>
         )}
-        <button onClick={handleLogout} className="btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}>
-          <LogOut size={13} /> Sign Out
-        </button>
+        {(userMenuOpen || !user) && (
+          <button onClick={handleLogout} className="sb-logout-btn">
+            <LogOut size={14} /> Sign Out
+          </button>
+        )}
       </div>
     </aside>
   );

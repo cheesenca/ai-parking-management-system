@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import type { Member, Zone, Category } from '@/lib/types';
+import type { Member, Zone, Category } from '@/types';
 import { apiGetMembers, apiCreateMember, apiUpdateMember, apiDeleteMember, apiImportMembers } from '@/lib/backendApi';
 import { Plus, Pencil, Trash2, X, Check, Search, Download, Upload, RefreshCw, ChevronLeft, ChevronRight, ArrowUpAZ, ArrowDownAZ } from 'lucide-react';
 
@@ -138,6 +138,10 @@ export default function MembersPage() {
         delete payload[k]; 
       }
     });
+    // Normalize plate numbers: strip all whitespace and uppercase so
+    // "B 1234 ABC" and "B1234ABC" are always treated as the same plate.
+    if (payload.plate_1) payload.plate_1 = payload.plate_1.replace(/\s+/g, '').toUpperCase();
+    if (payload.plate_2) payload.plate_2 = payload.plate_2.replace(/\s+/g, '').toUpperCase();
 
     try {
       if (modal === 'add') {
@@ -280,10 +284,10 @@ export default function MembersPage() {
     <>
       <div className="page-pad fadein">
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div className="lst-header">
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 4 }}>Members</h1>
-            <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+            <h1 className="tr-title">Members</h1>
+            <p className="tr-subtitle">
               Manage registered vehicle members · {loading ? '…' : `${total} total`}
             </p>
           </div>
@@ -323,23 +327,20 @@ export default function MembersPage() {
         )}
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-            <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+        <div className="mem-filters">
+          <div className="mem-search">
+            <Search size={13} className="mem-search-icon" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search name, KPK, or plate…"
-              style={{ ...inputStyle, paddingLeft: 32 }} />
+              className="mem-input" style={{ paddingLeft: 32 }} />
           </div>
           {(['All','west','east','eastwest'] as const).map(z => (
-            <button key={z} onClick={() => setActiveZone(z)} style={{
-              padding: '8px 14px', borderRadius: 8, border: '1px solid', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              borderColor: activeZone === z ? 'var(--red)' : 'var(--border)',
-              background:  activeZone === z ? 'var(--red)' : '#fff',
-              color:       activeZone === z ? '#fff' : 'var(--text)',
-            }}>{zoneLabels[z]}</button>
+            <button key={z} onClick={() => setActiveZone(z)} className={`mem-zone-pill${activeZone === z ? ' active' : ''}`}>
+              {zoneLabels[z]}
+            </button>
           ))}
           <select value={filterCat} onChange={e => setFilterCat(e.target.value as Category | 'All')}
-            style={{ ...inputStyle, width: 'auto', padding: '8px 12px' }}>
+            className="mem-input" style={{ width: 'auto', padding: '8px 12px' }}>
             <option value="All">All Categories</option>
             <option value="Employee">Employee</option>
             <option value="Vendor">Vendor</option>
@@ -350,7 +351,7 @@ export default function MembersPage() {
         {/* Table */}
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
+            <table className="data-table lst-table">
               <thead>
                 <tr>
                   <th><input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} /></th>
@@ -373,7 +374,12 @@ export default function MembersPage() {
                 {loading ? (
                   <tr><td colSpan={12} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Memuat data…</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={12} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>No members found.</td></tr>
+                  <tr><td colSpan={12}>
+                    <div className="lst-empty">
+                      <Search size={22} />
+                      <span>No members found.</span>
+                    </div>
+                  </td></tr>
                 ) : filtered.map(m => (
                   <tr key={m.member_id} style={{ opacity: saving ? 0.6 : 1 }}>
                     <td><input type="checkbox" checked={selected.includes(m.member_id)} onChange={() => toggleSelect(m.member_id)} /></td>
@@ -407,7 +413,7 @@ export default function MembersPage() {
           </div>
 
           {/* Pagination */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+          <div className="mem-pagination">
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>
               {loading ? 'Loading…' : total === 0 ? 'No members' : `Page ${page} of ${totalPages}`}
             </span>
@@ -435,28 +441,15 @@ export default function MembersPage() {
 
       {/* Modal Add / Edit */}
       {modal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', 
-          zIndex: 1000, padding: '20px', 
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 580,
-            boxShadow: '0 32px 80px rgba(0,0,0,.2)',
-            display: 'flex', flexDirection: 'column',
-            /* maxHeight: '90vh' TELAH DIHAPUS agar modal bisa terbuka penuh sesuai isi */
-          }}>
-            
+        <div className="mem-modal-overlay">
+          <div className="mem-modal fadein">
+
             {/* Modal Header */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '20px 24px', borderBottom: '1px solid var(--border)',
-              flexShrink: 0,
-            }}>
+            <div className="mem-modal-header">
               <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', margin: 0 }}>
                 {modal === 'add' ? '+ Add Member' : 'Edit Member'}
               </h3>
-              <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4 }}>
+              <button onClick={closeModal} className="mem-modal-close">
                 <X size={18} />
               </button>
             </div>
@@ -488,8 +481,19 @@ export default function MembersPage() {
                   <div key={f.key}>
                     <label style={labelStyle}>{f.label}</label>
                     <input style={inputStyle} value={(form as Record<string, string | undefined>)[f.key] || ''}
-                      onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        const value = (f.key === 'plate_1' || f.key === 'plate_2')
+                          ? raw.toUpperCase()
+                          : raw;
+                        setForm(prev => ({ ...prev, [f.key]: value }));
+                      }}
                       placeholder={f.placeholder} />
+                    {(f.key === 'plate_1' || f.key === 'plate_2') && (
+                      <span style={{ fontSize: 10.5, color: 'var(--muted2)', marginTop: 4, display: 'block' }}>
+                        Spasi diabaikan otomatis — &quot;B 1234 ABC&quot; = &quot;B1234ABC&quot;
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
