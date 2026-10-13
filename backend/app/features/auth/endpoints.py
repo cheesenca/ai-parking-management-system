@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import os
 import logging
+<<<<<<< HEAD
+=======
+import hashlib
+import secrets
+>>>>>>> origin/master
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,15 +16,32 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+<<<<<<< HEAD
 from app.core.database import get_db
 from app.core.models import AdminUser
+=======
+from app.db.session import get_db
+from app.db.models import AdminUser
+>>>>>>> origin/master
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+<<<<<<< HEAD
 SECRET_KEY = os.getenv("SECRET_KEY", "e8d6d16d4bcaed978853d2f4b6f5efb7b6bc58bcfcde3f9352f8f5f3ca38a51e")
 ALGORITHM = "HS256"
 EXPIRE_MIN = int(os.getenv("TOKEN_EXPIRE_MINUTES", "480"))   
+=======
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning(
+        "SECRET_KEY is not set in the environment. Generated a random key for this session"
+    )
+ALGORITHM = "HS256"
+EXPIRE_MIN = int(os.getenv("TOKEN_EXPIRE_MINUTES", "480"))
+RESET_TOKEN_EXPIRE_MIN = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "15"))
+>>>>>>> origin/master
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -48,6 +70,14 @@ class UserUpdate(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: str
+<<<<<<< HEAD
+=======
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    token: str
+>>>>>>> origin/master
     new_password: str
 
 
@@ -72,6 +102,7 @@ class LoginResponse(BaseModel):
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+<<<<<<< HEAD
     """
     Verifies whether the plaintext password input matches the hash in the database
     """
@@ -91,14 +122,39 @@ def create_token(data: dict, expire_minutes: int = EXPIRE_MIN) -> str:
     """
     Issuing a JWT with an expiration time claim
     """
+=======
+    """Verifies whether the plaintext password input matches the bcrypt hash stored in the database"""
+    try:
+        return pwd_context.verify(plain, hashed)
+    except (ValueError, TypeError):
+        return False
+
+
+def hash_password(plain: str) -> str:
+    """Convert plain-text passwords into a secure bcrypt hash format"""
+    return pwd_context.hash(plain)
+
+
+def _hash_reset_token(token: str) -> str:
+    """Reset tokens are stored hashed"""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_token(data: dict, expire_minutes: int = EXPIRE_MIN) -> str:
+    """Issuing a JWT with an expiration time claim"""
+>>>>>>> origin/master
     payload = {**data, "exp": datetime.utcnow() + timedelta(minutes=expire_minutes)}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Dependency Injection to secure endpoints
     """
+=======
+    """Dependency Injection to secure endpoints"""
+>>>>>>> origin/master
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="The token is invalid or has expired",
@@ -121,9 +177,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 
 def require_admin(current_user: AdminUser = Depends(get_current_user)) -> AdminUser:
+<<<<<<< HEAD
     """
     Dependency that restricts an endpoint to users with the 'Admin' role
     """
+=======
+    """Dependency that restricts an endpoint to users with the 'Admin' role"""
+>>>>>>> origin/master
     if current_user.role != "Admin":
         logger.warning("Forbidden: user '%s' (role=%s) attempted an admin-only action", current_user.username, current_user.role)
         raise HTTPException(
@@ -135,9 +195,13 @@ def require_admin(current_user: AdminUser = Depends(get_current_user)) -> AdminU
 
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Endpoint for user authentication
     """
+=======
+    """Endpoint for user authentication"""
+>>>>>>> origin/master
     admin = db.query(AdminUser).filter(AdminUser.username == req.username).first()
     if not admin or not verify_password(req.password, admin.password):
         logger.warning("Failed login attempt for username '%s'", req.username)
@@ -170,9 +234,13 @@ def list_users(
     db: Session = Depends(get_db),
     _admin: AdminUser = Depends(require_admin),
 ):
+<<<<<<< HEAD
     """
     Admin-only: list all Admin/Security accounts for the User Management screen.
     """
+=======
+    """Admin-only: list all Admin/Security accounts for the User Management screen"""
+>>>>>>> origin/master
     users = db.query(AdminUser).order_by(AdminUser.username.asc()).all()
     return [
         UserResponse(
@@ -189,9 +257,13 @@ def create_user(
     db: Session = Depends(get_db),
     admin: AdminUser = Depends(require_admin),
 ):
+<<<<<<< HEAD
     """
     Create a new Admin or Security account
     """
+=======
+    """Create a new Admin or Security account"""
+>>>>>>> origin/master
     existing_user = db.query(AdminUser).filter(
         (AdminUser.username == req.username) | (AdminUser.email == req.email)
     ).first()
@@ -227,9 +299,13 @@ def update_user(
     db: Session = Depends(get_db),
     admin: AdminUser = Depends(require_admin),
 ):
+<<<<<<< HEAD
     """
     Update an existing Admin/Security account's profile, role, or password.
     """
+=======
+    """Update an existing Admin/Security account's profile, role, or password"""
+>>>>>>> origin/master
     target = db.query(AdminUser).filter(AdminUser.admin_id == admin_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -268,9 +344,13 @@ def delete_user(
     db: Session = Depends(get_db),
     admin: AdminUser = Depends(require_admin),
 ):
+<<<<<<< HEAD
     """
     Remove an Admin/Security account. Admins cannot delete their own account.
     """
+=======
+    """Remove an Admin/Security account. Admins cannot delete their own account"""
+>>>>>>> origin/master
     if admin_id == admin.admin_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
 
@@ -285,6 +365,7 @@ def delete_user(
 
 @router.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Demo simulation endpoint for resetting a user's password based on email verification
     """
@@ -296,16 +377,67 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user.password = hash_password(req.new_password)
     db.commit()
     logger.info("Password reset for user '%s'", user.username)
+=======
+    """Issue a short-lived, single-use token for the account matching the given email."""
+    user = db.query(AdminUser).filter(AdminUser.email == req.email).first()
+    generic_response = {"message": "If the email is registered, a reset link has been sent"}
+
+    if not user:
+        logger.warning("Password reset requested for unknown email '%s'", req.email)
+        return generic_response
+
+    raw_token = secrets.token_urlsafe(32)
+    user.reset_token_hash = _hash_reset_token(raw_token)
+    user.reset_token_expires = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MIN)
+    db.commit()
+    logger.info("Password reset token issued for user '%s'", user.username)
+
+    return {**generic_response, "token": raw_token, "expires_in_minutes": RESET_TOKEN_EXPIRE_MIN}
+
+
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Consume the token issued by /forgot-password and set a new password"""
+    invalid_exception = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Reset token is invalid or has expired",
+    )
+
+    user = db.query(AdminUser).filter(AdminUser.email == req.email).first()
+    if not user or not user.reset_token_hash or not user.reset_token_expires:
+        raise invalid_exception
+
+    if datetime.utcnow() > user.reset_token_expires:
+        raise invalid_exception
+
+    if not secrets.compare_digest(user.reset_token_hash, _hash_reset_token(req.token)):
+        logger.warning("Invalid password reset token presented for '%s'", req.email)
+        raise invalid_exception
+
+    user.password = hash_password(req.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires = None
+    db.commit()
+    logger.info("Password reset completed for user '%s'", user.username)
+>>>>>>> origin/master
     return {"message": "Password has been reset"}
 
 
 @router.get("/me", response_model=AuthUserResponse)
 def me(current_user: AdminUser = Depends(get_current_user)):
+<<<<<<< HEAD
     """
     Protected endpoint for retrieving profile information of the currently logged-in user
     """
+=======
+    """Protected endpoint for retrieving profile information of the currently logged-in user"""
+>>>>>>> origin/master
     return AuthUserResponse(
         username=current_user.username,
         role=current_user.role,
         location=current_user.location
+<<<<<<< HEAD
     )
+=======
+    )
+>>>>>>> origin/master

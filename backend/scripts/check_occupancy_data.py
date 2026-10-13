@@ -2,9 +2,15 @@
 Usage: python -m scripts.check_occupancy_data
 """
 
+<<<<<<< HEAD
 from app.core.database import SessionLocal
 from app.core.config import settings
 from app.core.models import OccupancySnapshot
+=======
+from app.db.session import SessionLocal
+from app.core.config import settings
+from app.db.models import OccupancySnapshot
+>>>>>>> origin/master
 from app.features.forecast.services.retrain import _zone_ids_by_key, _build_daily_series
  
  

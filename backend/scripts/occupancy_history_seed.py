@@ -11,8 +11,13 @@ import argparse
 import random
 from datetime import datetime, timedelta
 
+<<<<<<< HEAD
 from app.core.database import SessionLocal
 from app.core.models import OccupancySnapshot, ParkingZone
+=======
+from app.db.session import SessionLocal
+from app.db.models import OccupancySnapshot, ParkingZone
+>>>>>>> origin/master
 
 N_DAYS_DEFAULT = 60
 RANDOM_SEED = 42

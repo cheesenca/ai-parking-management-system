@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dependencies & Build artifacts lokal
 node_modules
 .next
@@ -31,3 +32,15 @@ docker-compose*
 # System OS
 .DS_Store
 Thumbs.db
+=======
+node_modules
+.next
+
+.git
+
+.env*
+
+*.md
+
+npm-debug.log*
+>>>>>>> origin/master

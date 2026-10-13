@@ -9,10 +9,16 @@ import type {
   PendingReview,
 } from '@/types';
 
+<<<<<<< HEAD
 const BASE =
   typeof window !== 'undefined'
     ? `http://${process.env.NEXT_PUBLIC_BACKEND_HOST || 'localhost:8000'}`
     : `http://${process.env.NEXT_PUBLIC_BACKEND_HOST || 'localhost:8000'}`;
+=======
+// Both branches of the old ternary here produced the same string, so the
+// `typeof window` check was dead code — simplified to the value itself.
+const BASE = `http://${process.env.NEXT_PUBLIC_BACKEND_HOST || 'localhost:8000'}`;
+>>>>>>> origin/master
 
 export const TOKEN_KEY = 'aips_token';
 export const USER_KEY  = 'aips_user';
@@ -90,6 +96,7 @@ export async function apiLogin(
   return data.user;
 }
 
+<<<<<<< HEAD
 export async function apiForgotPassword(
   email: string,
   new_password: string,
@@ -97,6 +104,29 @@ export async function apiForgotPassword(
   return apiFetch<{ message: string }>(
     '/api/v1/auth/forgot-password',
     { method: 'POST', body: JSON.stringify({ email, new_password }) },
+=======
+// Two-step reset flow, matching the backend change: requesting a reset no
+// longer sets the password directly (that let anyone with an email take
+// over an account). Step 1 issues a token, step 2 consumes it.
+export async function apiRequestPasswordReset(
+  email: string,
+): Promise<{ message: string; token?: string; expires_in_minutes?: number }> {
+  return apiFetch(
+    '/api/v1/auth/forgot-password',
+    { method: 'POST', body: JSON.stringify({ email }) },
+    true,
+  );
+}
+
+export async function apiConfirmPasswordReset(
+  email: string,
+  token: string,
+  new_password: string,
+): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(
+    '/api/v1/auth/reset-password',
+    { method: 'POST', body: JSON.stringify({ email, token, new_password }) },
+>>>>>>> origin/master
     true,
   );
 }
@@ -172,12 +202,20 @@ export async function apiGetLogs(
 ): Promise<EntryLog[]> {
   const q = new URLSearchParams({ limit: String(limit) });
   if (zone) q.set('zone', zone);
+<<<<<<< HEAD
   
   try {
     return await apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
   } catch (err) {
     return await apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
   }
+=======
+
+  // Previously this retried the identical failing call once and just
+  // re-threw the same error — removed, since apiFetch already surfaces a
+  // clear error message for callers to handle.
+  return apiFetch<EntryLog[]>(`/api/v1/slots/logs?${q}`);
+>>>>>>> origin/master
 }
 
 export async function apiGetLiveSlots(zone: string) {

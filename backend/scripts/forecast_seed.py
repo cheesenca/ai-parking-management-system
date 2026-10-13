@@ -7,8 +7,13 @@ import pandas as pd
 from datetime import date, time
 from pathlib import Path
 
+<<<<<<< HEAD
 from app.core.database import SessionLocal, create_tables
 from app.core.models import AnalyticsData
+=======
+from app.db.session import SessionLocal, create_tables
+from app.db.models import AnalyticsData
+>>>>>>> origin/master
 from app.features.forecast.models import AREA_CODES, AREA_ZONE_ID_MAP, AREA_LOCATION_MAP
 
 logger = logging.getLogger(__name__)

@@ -9,8 +9,13 @@ import pandas as pd
 from prophet import Prophet
 
 from app.core.config import settings
+<<<<<<< HEAD
 from app.core.database import SessionLocal
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
+=======
+from app.db.session import session_local
+from app.db.models import AnalyticsData, OccupancySnapshot, ParkingZone
+>>>>>>> origin/master
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +204,11 @@ def retrain_all_zones() -> dict[str, dict]:
     """
     Retrains Prophet models for all zones and saves them to disk
     """
+<<<<<<< HEAD
     db = SessionLocal()
+=======
+    db = session_local()
+>>>>>>> origin/master
     try:
         zone_ids = _zone_ids_by_key(db)
         existing_models = _load_existing_models()

@@ -4,12 +4,22 @@ import logging
 import re
 from datetime import date
 from typing import List, Optional
+<<<<<<< HEAD
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.models import Member, Vehicle
+=======
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.db.models import Member, Vehicle
+from app.common.exceptions import ConflictError, NotFoundError
+>>>>>>> origin/master
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -53,9 +63,13 @@ class ImportRow(BaseModel):
 
 
 def _normalize_plate(plate: Optional[str]) -> Optional[str]:
+<<<<<<< HEAD
     """
     Normalizes a license plate 
     """
+=======
+    """Normalizes a license plate"""
+>>>>>>> origin/master
     if plate is None:
         return None
     compact = re.sub(r"\s+", "", plate).upper()
@@ -74,9 +88,13 @@ def _normalize_plate(plate: Optional[str]) -> Optional[str]:
 
 
 def _parse_date(s: Optional[str]) -> Optional[date]:
+<<<<<<< HEAD
     """
     Convert an ISO-formatted date string into a Python date object
     """
+=======
+    """Convert an ISO-formatted date string into a Python date object"""
+>>>>>>> origin/master
     if not s:
         return None
     try:
@@ -95,9 +113,13 @@ def list_members(
     page_size: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+<<<<<<< HEAD
     """
     Retrieve a paginated, sorted list of members based on zone, category, or text search filters
     """
+=======
+    """Retrieve a paginated, sorted list of members based on zone, category, or text search filters"""
+>>>>>>> origin/master
     q = db.query(Member)
     if zone:
         q = q.filter(Member.registered_plant == zone)
@@ -126,19 +148,31 @@ def list_members(
 
 @router.post("", status_code=201)
 def create_member(body: MemberCreate, db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Registering new members in the database, along with their vehicle details
     """
+=======
+    """Registering new members in the database, along with their vehicle details"""
+>>>>>>> origin/master
     plate_1 = _normalize_plate(body.plate_1)
     plate_2 = _normalize_plate(body.plate_2)
 
     if db.query(Member).filter(Member.kpk_number == body.kpk_number).first():
         logger.warning("Create member rejected: KPK '%s' already registered", body.kpk_number)
+<<<<<<< HEAD
         raise HTTPException(status_code=409, detail=f"KPK '{body.kpk_number}' already registered")
     
     if db.query(Vehicle).filter(Vehicle.plate_number == plate_1).first():
         logger.warning("Create member rejected: plate '%s' already registered", plate_1)
         raise HTTPException(status_code=409, detail=f"Plate '{plate_1}' already registered")
+=======
+        raise ConflictError(f"KPK '{body.kpk_number}' already registered")
+    
+    if db.query(Vehicle).filter(Vehicle.plate_number == plate_1).first():
+        logger.warning("Create member rejected: plate '%s' already registered", plate_1)
+        raise ConflictError(f"Plate '{plate_1}' already registered")
+>>>>>>> origin/master
 
     member = Member(
         kpk_number=body.kpk_number,
@@ -159,7 +193,11 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
 
     if plate_2:
         if db.query(Vehicle).filter(Vehicle.plate_number == plate_2).first():
+<<<<<<< HEAD
             raise HTTPException(status_code=409, detail=f"Plate 2 '{plate_2}' already registered")
+=======
+            raise ConflictError(f"Plate 2 '{plate_2}' already registered")
+>>>>>>> origin/master
         db.add(Vehicle(
             member_id=member.member_id,
             plate_number=plate_2,
@@ -175,6 +213,7 @@ def create_member(body: MemberCreate, db: Session = Depends(get_db)):
 
 @router.put("/{member_id}")
 def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Update member profile data and associated vehicle data based on member_id
     """
@@ -182,6 +221,13 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
     if not member:
         logger.warning("Update member failed: member_id=%s not found", member_id)
         raise HTTPException(status_code=404, detail="Member not found")
+=======
+    """Update member profile data and associated vehicle data based on member_id"""
+    member = db.query(Member).filter(Member.member_id == member_id).first()
+    if not member:
+        logger.warning("Update member failed: member_id=%s not found", member_id)
+        raise NotFoundError("Member not found")
+>>>>>>> origin/master
 
     if body.name: 
         member.name = body.name
@@ -206,7 +252,11 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
         ).first()
 
         if conflict:
+<<<<<<< HEAD
             raise HTTPException(status_code=409, detail=f"Plate '{plate_1}' already used by the other member")
+=======
+            raise ConflictError(f"Plate '{plate_1}' already used by the other member")
+>>>>>>> origin/master
         v1.plate_number = plate_1
 
     if v1 and body.vehicle_type_1: 
@@ -222,7 +272,11 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
             Vehicle.vehicle_id != (v2.vehicle_id if v2 else -1),
         ).first()
         if conflict:
+<<<<<<< HEAD
             raise HTTPException(status_code=409, detail=f"Plate '{plate_2}' already used by the other member")
+=======
+            raise ConflictError(f"Plate '{plate_2}' already used by the other member")
+>>>>>>> origin/master
         if v2:
             v2.plate_number = plate_2
             if body.vehicle_type_2: v2.vehicle_type = body.vehicle_type_2
@@ -242,6 +296,7 @@ def update_member(member_id: int, body: MemberUpdate, db: Session = Depends(get_
 
 @router.delete("/{member_id}", status_code=204)
 def delete_member(member_id: int, db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Delete member data based on ID
     """
@@ -249,6 +304,13 @@ def delete_member(member_id: int, db: Session = Depends(get_db)):
     if not member:
         logger.warning("Delete member failed: member_id=%s not found", member_id)
         raise HTTPException(status_code=404, detail="Member not found")
+=======
+    """Delete member data based on ID"""
+    member = db.query(Member).filter(Member.member_id == member_id).first()
+    if not member:
+        logger.warning("Delete member failed: member_id=%s not found", member_id)
+        raise NotFoundError("Member not found")
+>>>>>>> origin/master
     db.delete(member)
     db.commit()
     logger.info("Member deleted: member_id=%s", member_id)
@@ -256,9 +318,13 @@ def delete_member(member_id: int, db: Session = Depends(get_db)):
 
 @router.post("/import")
 def import_members(body: ImportRow, db: Session = Depends(get_db)):
+<<<<<<< HEAD
     """
     Perform a bulk import of member data from a list or array
     """
+=======
+    """Perform a bulk import of member data from a list or array"""
+>>>>>>> origin/master
     created = 0
     errors: list[str] = []
     for row in body.rows:

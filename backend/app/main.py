@@ -1,10 +1,15 @@
 import os
 import logging
 from contextlib import asynccontextmanager
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/master
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
+<<<<<<< HEAD
 from fastapi.middleware.cors import CORSMiddleware
 from app.core import create_tables, check_connection, settings, setup_logging
 from app.features.auth.endpoints import router as auth_router
@@ -14,6 +19,15 @@ from app.features.forecast.services.retrain import retrain_all_zones
 from app.features.ocr.api.endpoints import router as ocr_router, ws_router as ocr_ws_router
 from app.features.ocr.services.review_queue import run_pending_review_sweep
 from app.features.occupancy.api.endpoints import router as slots_router, ws_router as slots_ws_router
+=======
+
+from app.core import create_tables, check_connection, settings, setup_logging
+from app.api.router import api_router
+from app.common.middleware.cors import setup_cors
+from app.common.exceptions_handler import register_exception_handlers
+from app.features.forecast.services.retrain import retrain_all_zones
+from app.features.ocr.services.review_queue import run_pending_review_sweep
+>>>>>>> origin/master
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -21,9 +35,13 @@ scheduler = AsyncIOScheduler()
 
 
 def _run_prophet_retrain_job() -> None:
+<<<<<<< HEAD
     """
     Run the Prophet retraining job and log the result
     """
+=======
+    """Run the Prophet retraining job and log the result"""
+>>>>>>> origin/master
     logger.info("Scheduled Prophet retrain starting...")
     try:
         results = retrain_all_zones()
@@ -35,7 +53,11 @@ def _run_prophet_retrain_job() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Application starting up...")
+<<<<<<< HEAD
  
+=======
+
+>>>>>>> origin/master
     db_ok = check_connection()
     if not db_ok:
         logger.warning("Database connection check failed at startup")
@@ -73,8 +95,13 @@ async def lifespan(app: FastAPI):
     if scheduler.running:
         scheduler.shutdown(wait=False)
     logger.info("Application shutting down...")
+<<<<<<< HEAD
  
  
+=======
+
+
+>>>>>>> origin/master
 app = FastAPI(
     title="AI Parking Management System",
     description="AI Parking Management System Backend API",
@@ -83,6 +110,7 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+<<<<<<< HEAD
  
 app.add_middleware(
     CORSMiddleware,
@@ -127,6 +155,13 @@ app.include_router(
     prefix=f"{settings.API_V1_PREFIX}/forecast", 
     tags=["Forecast"],
 )
+=======
+
+setup_cors(app)
+register_exception_handlers(app)
+app.include_router(api_router)
+
+>>>>>>> origin/master
 
 @app.get("/", tags=["Root"])
 def root():
@@ -152,7 +187,12 @@ def root():
             "forecast": f"{settings.API_V1_PREFIX}/forecast",
         },
     }
+<<<<<<< HEAD
  
+=======
+
+
+>>>>>>> origin/master
 @app.get("/health", tags=["Root"])
 def health():
     db_ok = check_connection()
@@ -160,16 +200,28 @@ def health():
         "status": "ok" if db_ok else "degraded",
         "database": "connected" if db_ok else "disconnected",
     }
+<<<<<<< HEAD
  
  
 if __name__ == "__main__":
     import uvicorn
  
+=======
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+>>>>>>> origin/master
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
         log_level=os.getenv("LOG_LEVEL", "info").lower(),
+<<<<<<< HEAD
     )
     
+=======
+    )
+>>>>>>> origin/master

@@ -9,8 +9,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+<<<<<<< HEAD
 from app.core.database import SessionLocal
 from app.core.models import EntryExitLog, ParkingZone, PendingPlateReview
+=======
+from app.db.session import session_local
+from app.db.models import EntryExitLog, ParkingZone, PendingPlateReview
+>>>>>>> origin/master
 from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
 from app.features.ocr.services.session_tracking import record_entry, record_exit
 
@@ -47,7 +52,11 @@ def queue_for_review(event: dict, zone_key: str) -> int | None:
 
     Returns the new review_id, or None if it couldn't be queued.
     """
+<<<<<<< HEAD
     db = SessionLocal()
+=======
+    db = session_local()
+>>>>>>> origin/master
     try:
         zone = db.query(ParkingZone).filter(ParkingZone.zone_key == zone_key).first()
         if zone is None:
@@ -94,7 +103,11 @@ def run_pending_review_sweep() -> None:
         logger.warning("[ReviewQueue] Pipeline not loaded — skipping sweep")
         return
 
+<<<<<<< HEAD
     db = SessionLocal()
+=======
+    db = session_local()
+>>>>>>> origin/master
     try:
         review_ids = [
             r.review_id for r in
@@ -115,7 +128,11 @@ def run_pending_review_sweep() -> None:
 
 
 def _resolve_one(review_id: int, pipeline) -> None:
+<<<<<<< HEAD
     db = SessionLocal()
+=======
+    db = session_local()
+>>>>>>> origin/master
     try:
         review = db.query(PendingPlateReview).filter(PendingPlateReview.review_id == review_id).first()
         if review is None or review.status != 'queued':

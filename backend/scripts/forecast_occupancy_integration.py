@@ -9,8 +9,13 @@ import sys
 from datetime import datetime, timedelta
 
 from app.core.config import settings
+<<<<<<< HEAD
 from app.core.database import SessionLocal
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
+=======
+from app.db.session import SessionLocal
+from app.db.models import AnalyticsData, OccupancySnapshot, ParkingZone
+>>>>>>> origin/master
 from app.features.forecast.services.retrain import (
     AREA_ZONE_MAP,
     retrain_all_zones,

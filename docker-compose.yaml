@@ -1,6 +1,7 @@
 services:
   db:
     image: mysql:8.0
+<<<<<<< HEAD
     container_name: aips_db
     restart: unless-stopped
     environment:
@@ -43,10 +44,45 @@ services:
       timeout: 5s
       retries: 8
       start_period: 60s
+=======
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ""               
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: aips_db
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./backend/seeds/aips_db.sql:/docker-entrypoint-initdb.d/aips_db.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy  
+    environment:
+      DATABASE_URL: "mysql+pymysql://root:@db:3306/aips_db"
+      SECRET_KEY: ${SECRET_KEY}      
+      CORS_ORIGINS: "http://localhost:3000"
+      YOLO_DEVICE: "cpu"             
+    volumes:
+      - ./backend/ml:/app/ml
+      - ./backend/data:/app/data
+    ports:
+      - "8000:8000"
+>>>>>>> origin/master
 
   frontend:
     build:
       context: ./frontend
+<<<<<<< HEAD
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_BACKEND_HOST: localhost:8000
@@ -59,6 +95,15 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+=======
+      args:
+        NEXT_PUBLIC_BACKEND_HOST: "localhost:8000" 
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+>>>>>>> origin/master
 
 volumes:
   db_data:

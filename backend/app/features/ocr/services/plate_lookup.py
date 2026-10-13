@@ -1,7 +1,11 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+<<<<<<< HEAD
 from app.core.models import Vehicle
+=======
+from app.db.models import Vehicle
+>>>>>>> origin/master
 from app.features.ocr.pipeline.plate_utils import format_plate_display
 
 

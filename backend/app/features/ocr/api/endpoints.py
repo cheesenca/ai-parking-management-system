@@ -13,8 +13,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
 from pipeline import AIPSPipeline
 from plate_utils import normalize_plate, is_valid_plate_format
 
+<<<<<<< HEAD
 from app.core.database import get_db, SessionLocal
 from app.core.models import EntryExitLog, ParkingZone, PendingPlateReview
+=======
+from app.db.session import get_db, session_local
+from app.db.models import EntryExitLog, ParkingZone, PendingPlateReview
+>>>>>>> origin/master
 from app.features.auth.endpoints import get_current_user
 from app.features.ocr.schemas.detection import ManualApprovalRequest
 from app.features.ocr.services.plate_lookup import find_vehicle_by_plate, resolve_or_create_vehicle
@@ -56,7 +61,11 @@ def save_detection_event(event: dict, zone_key: str) -> None:
     Runs in its own short-lived DB session so a slow/failed write
     never blocks or crashes the camera streaming loop.
     """
+<<<<<<< HEAD
     db = SessionLocal()
+=======
+    db = session_local()
+>>>>>>> origin/master
     try:
         zone = db.query(ParkingZone).filter(ParkingZone.zone_key == zone_key).first()
         if zone is None:
@@ -111,7 +120,11 @@ def _lookup_member_for_display(plate: str) -> dict | None:
     """
     if not plate:
         return None
+<<<<<<< HEAD
     db = SessionLocal()
+=======
+    db = session_local()
+>>>>>>> origin/master
     try:
         vehicle = find_vehicle_by_plate(db, plate)
         if vehicle and vehicle.user_category == "Member" and vehicle.member:

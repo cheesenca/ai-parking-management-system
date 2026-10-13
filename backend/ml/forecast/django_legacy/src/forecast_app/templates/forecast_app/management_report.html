@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PTMI Parking Management Forecast Report</title>
+
+    <style>
+        :root {
+            --red: #E5002B;
+            --red-dark: #B80022;
+            --navy: #102A43;
+            --ink: #101828;
+            --text: #344054;
+            --muted: #667085;
+            --border: #D0D5DD;
+            --soft-bg: #F8FAFC;
+            --light-red: #FFF0F3;
+            --green-bg: #E8F7F0;
+            --green-text: #087443;
+            --yellow-bg: #FFF3D6;
+            --yellow-text: #946200;
+            --red-bg: #FFE1E6;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #E5E7EB;
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 18px auto;
+            background: #FFFFFF;
+            padding: 18mm;
+            box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+        }
+
+        .report-header {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            align-items: start;
+            padding-bottom: 14px;
+            border-bottom: 3px solid var(--red);
+        }
+
+        .company-label {
+            color: var(--red);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--ink);
+            font-size: 24px;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+        }
+
+        .subtitle {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .meta-box {
+            min-width: 185px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: var(--soft-bg);
+        }
+
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .meta-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .meta-label {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .meta-value {
+            color: var(--ink);
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .section {
+            margin-top: 18px;
+        }
+
+        .section-title {
+            margin: 0 0 10px;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: "";
+            width: 5px;
+            height: 16px;
+            background: var(--red);
+            border-radius: 999px;
+            display: inline-block;
+        }
+
+        .summary-box {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #FFFFFF;
+            padding: 14px 16px;
+        }
+
+        .summary-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .summary-list li {
+            margin-bottom: 6px;
+        }
+
+        .summary-list li:last-child {
+            margin-bottom: 0;
+        }
+
+        .concept-note {
+            margin-top: 10px;
+            border-left: 4px solid var(--red);
+            background: var(--light-red);
+            padding: 10px 12px;
+            color: var(--red-dark);
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 8px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .metric-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            background: var(--soft-bg);
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            color: var(--ink);
+            font-size: 21px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .metric-note {
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .perspective-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .perspective-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: #FFFFFF;
+        }
+
+        .perspective-head {
+            padding: 10px 12px;
+            background: var(--navy);
+            color: #FFFFFF;
+            font-weight: 800;
+            font-size: 13px;
+        }
+
+        .perspective-body {
+            padding: 12px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 6px 0;
+            border-bottom: 1px solid #EAECF0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .info-value {
+            color: var(--ink);
+            font-weight: 800;
+            text-align: right;
+        }
+
+        .recommendation {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            background: var(--light-red);
+            color: var(--red-dark);
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        .small-note {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 10px;
+            font-style: italic;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th {
+            background: var(--navy);
+            color: #FFFFFF;
+            font-size: 11px;
+            text-align: left;
+            padding: 9px 10px;
+            border-right: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        td {
+            padding: 9px 10px;
+            border-bottom: 1px solid #EAECF0;
+            border-right: 1px solid #EAECF0;
+            vertical-align: top;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            min-width: 70px;
+            text-align: center;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        .badge-high {
+            background: var(--red-bg);
+            color: var(--red-dark);
+        }
+
+        .badge-medium {
+            background: var(--yellow-bg);
+            color: var(--yellow-text);
+        }
+
+        .badge-low {
+            background: var(--green-bg);
+            color: var(--green-text);
+        }
+
+        .footer-note {
+            margin-top: 18px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .print-actions {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .print-btn,
+        .back-btn {
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-weight: 800;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .print-btn {
+            border: none;
+            background: var(--red);
+            color: #FFFFFF;
+        }
+
+        .back-btn {
+            background: #FFFFFF;
+            color: var(--ink);
+            border: 1px solid var(--border);
+        }
+
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        @media print {
+            body {
+                background: #FFFFFF;
+            }
+
+            .page {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            .print-actions {
+                display: none;
+            }
+
+            .section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="print-actions">
+        <a class="back-btn" href="{% url 'forecast_dashboard' %}">Back to Dashboard</a>
+        <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+    </div>
+
+    <main class="page">
+        <header class="report-header">
+            <div>
+                <div class="company-label">PTMI Parking Management</div>
+                <h1>Parking Management Forecast Report</h1>
+                <div class="subtitle">
+                    Management insight report based on daily, weekly, and monthly parking forecast.
+                </div>
+            </div>
+
+            <div class="meta-box">
+                <div class="meta-row">
+                    <span class="meta-label">Report Date</span>
+                    <span class="meta-value">{{ report_date }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Forecast Year</span>
+                    <span class="meta-value">{{ report_year }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Report Type</span>
+                    <span class="meta-value">Management</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="section">
+            <h2 class="section-title">Executive Summary</h2>
+
+            <div class="summary-box">
+                <ul class="summary-list">
+                    {% for item in executive_summary %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+
+                <div class="concept-note">
+                    Reading concept: Daily forecast is for operational risk, weekly forecast is for area monitoring,
+                    and monthly forecast is for capacity planning based on availability trend.
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2 class="section-title">Key Metrics</h2>
+
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Daily Forecast</div>
+                    <div class="metric-value">{{ daily_total }}</div>
+                    <div class="metric-note">Predicted vehicles on selected date</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Weekly Forecast</div>
+                    <div class="metric-value">{{ weekly_total }}</div>
+                    <div class="metric-note">Predicted vehicles on selected week</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Monthly Forecast</div>
+                    <div class="metric-value">{{ monthly_total }}</div>
+                    <div class="metric-note">Predicted vehicles on selected month</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Priority Areas</div>
+                    <div class="metric-value">{{ high_priority_count }}</div>
+                    <div class="metric-note">High priority area count</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2 class="section-title">Forecast Perspective Summary</h2>
+
+            <div class="perspective-grid">
+                <div class="perspective-card">
+                    <div class="perspective-head">Daily Perspective</div>
+
+                    <div class="perspective-body">
+                        <div class="info-row">
+                            <span class="info-label">Selected Date</span>
+                            <span class="info-value">{{ daily_selected_date }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Total Vehicles</span>
+                            <span class="info-value">{{ daily_total }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Avg. Occupancy</span>
+                            <span class="info-value">{{ daily_occupancy }}%</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Full Records</span>
+                            <span class="info-value">{{ daily_full_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Warning Records</span>
+                            <span class="info-value">{{ daily_warning_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Condition</span>
+                            <span class="info-value">{{ daily_condition }}</span>
+                        </div>
+
+                        <div class="recommendation">
+                            {{ daily_recommendation }}
+                        </div>
+
+                        <div class="small-note">
+                            Daily status focuses on immediate operational conditions.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="perspective-card">
+                    <div class="perspective-head">Weekly Perspective</div>
+
+                    <div class="perspective-body">
+                        <div class="info-row">
+                            <span class="info-label">Selected Week</span>
+                            <span class="info-value">{{ weekly_selected }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Total Vehicles</span>
+                            <span class="info-value">{{ weekly_total }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">High Records</span>
+                            <span class="info-value">{{ weekly_high_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Moderate Records</span>
+                            <span class="info-value">{{ weekly_moderate_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Good Records</span>
+                            <span class="info-value">{{ weekly_good_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Condition</span>
+                            <span class="info-value">{{ weekly_condition }}</span>
+                        </div>
+
+                        <div class="recommendation">
+                            {{ weekly_recommendation }}
+                        </div>
+
+                        <div class="small-note">
+                            Weekly status is based on area demand contribution.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="perspective-card">
+                    <div class="perspective-head">Monthly Perspective (Next 7 Months)</div>
+
+                    <div class="perspective-body">
+                        <div class="info-row">
+                            <span class="info-label">Selected Month</span>
+                            <span class="info-value">{{ monthly_selected }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Total Vehicles</span>
+                            <span class="info-value">{{ monthly_total }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Availability Increase Records</span>
+                            <span class="info-value">{{ monthly_increase_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Availability Decrease Records</span>
+                            <span class="info-value">{{ monthly_decrease_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Stable Records</span>
+                            <span class="info-value">{{ monthly_stable_count }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Condition</span>
+                            <span class="info-value">{{ monthly_condition }}</span>
+                        </div>
+
+                        <div class="recommendation">
+                            {{ monthly_recommendation }}
+                        </div>
+
+                        <div class="small-note">
+                            Monthly trend compares available slots with the previous month.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2 class="section-title">Area Attention Summary</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 9%;">Area</th>
+                        <th style="width: 13%;">Priority</th>
+                        <th style="width: 13%;">Daily Status</th>
+                        <th style="width: 13%;">Weekly Status</th>
+                        <th style="width: 14%;">Monthly Status</th>
+                        <th style="width: 22%;">Reason</th>
+                        <th style="width: 16%;">Suggested Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for item in area_summary %}
+                    <tr>
+                        <td><strong>{{ item.area }}</strong></td>
+
+                        <td>
+                            {% if item.priority == "High" %}
+                                <span class="badge badge-high">High</span>
+                            {% elif item.priority == "Medium" %}
+                                <span class="badge badge-medium">Medium</span>
+                            {% else %}
+                                <span class="badge badge-low">Low</span>
+                            {% endif %}
+                        </td>
+
+                        <td>{{ item.daily_status }}</td>
+                        <td>{{ item.weekly_status }}</td>
+                        <td>{{ item.monthly_trend }}</td>
+                        <td>{{ item.reason }}</td>
+                        <td>{{ item.action }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="small-note">
+                Note: Monthly status in this table refers to the selected month. Increase and Decrease records in the Monthly Perspective summarize the next 7-month window.
+            </div>
+        </section>
+
+        <section class="section">
+            <h2 class="section-title">Management Recommendations</h2>
+
+            <div class="summary-box">
+                <ul class="summary-list">
+                    <li>Prioritize monitoring for areas categorized as High Priority.</li>
+                    <li>Prepare overflow parking when daily forecast indicates Full or Warning conditions.</li>
+                    <li>Use weekly forecast to support operational monitoring and parking allocation.</li>
+                    <li>Use monthly availability trend to support capacity planning and management decision-making.</li>
+                    <li>Review forecast results regularly to improve parking management strategy.</li>
+                </ul>
+            </div>
+        </section>
+
+        <div class="footer-note">
+            <span>Generated by PTMI Parking Forecast System</span>
+            <span>Daily • Weekly • Monthly Forecast Insight</span>
+        </div>
+    </main>
+
+    <script>
+        window.addEventListener("load", function () {
+            setTimeout(function () {
+                window.print();
+            }, 700);
+        });
+    </script>
+</body>
+</html>

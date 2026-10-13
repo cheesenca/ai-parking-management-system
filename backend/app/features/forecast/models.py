@@ -1,5 +1,9 @@
 from types import SimpleNamespace
+<<<<<<< HEAD
 from app.core.models import AnalyticsData
+=======
+from app.db.models import AnalyticsData
+>>>>>>> origin/master
 
 # Canonical area codes present in the dataset
 AREA_CODES = ["P1W", "P1E", "P2W", "P2E", "P3W", "P3E"]

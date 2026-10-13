@@ -3,8 +3,13 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+<<<<<<< HEAD
 from app.core.database import get_db
 from app.core.models import AnalyticsData, OccupancySnapshot, ParkingZone
+=======
+from app.db.session import get_db
+from app.db.models import AnalyticsData, OccupancySnapshot, ParkingZone
+>>>>>>> origin/master
 from app.features.auth.endpoints import get_current_user
 from app.features.forecast.services.model import forecast_next_days
 from app.features.forecast.services.retrain import retrain_all_zones

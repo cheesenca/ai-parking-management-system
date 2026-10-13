@@ -24,4 +24,8 @@ python-multipart
 pillow
 python-dotenv
 websockets
+<<<<<<< HEAD
 openpyxl
+=======
+openpyxl
+>>>>>>> origin/master

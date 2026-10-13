@@ -35,8 +35,13 @@ def _bootstrap(f: str) -> None:
 
 _bootstrap(__file__)
 
+<<<<<<< HEAD
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.models import EntryExitLog, Member, ParkingZone, Vehicle  # noqa: E402
+=======
+from app.db.session import SessionLocal  # noqa: E402
+from app.db.models import EntryExitLog, Member, ParkingZone, Vehicle  # noqa: E402
+>>>>>>> origin/master
 
 logger = logging.getLogger(__name__)
 

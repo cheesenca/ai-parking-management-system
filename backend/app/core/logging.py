@@ -8,9 +8,13 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 def setup_logging() -> None:
+<<<<<<< HEAD
     """
     Configure application-wide logging.
     """
+=======
+    """Configure application-wide logging"""
+>>>>>>> origin/master
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     settings.LOGS_DIR.mkdir(parents=True, exist_ok=True)
 

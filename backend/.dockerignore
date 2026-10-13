@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Python virtual environments & cache
 venv/
 .venv/
@@ -33,3 +34,25 @@ Thumbs.db
 Dockerfile*
 docker-compose*
 .dockerignore
+=======
+.git
+.gitignore
+
+.env
+.venv/
+venv/
+
+__pycache__/
+*.pyc
+
+ml/
+data/
+logs/
+*.pt
+*.joblib
+ 
+tests/
+scripts/
+seeds/
+*.md
+>>>>>>> origin/master

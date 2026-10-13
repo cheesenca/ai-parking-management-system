@@ -31,8 +31,13 @@ def _bootstrap(f: str) -> None:
 
 _bootstrap(__file__)
 
+<<<<<<< HEAD
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.models import EntryExitLog, OccupancySnapshot, ParkingZone  # noqa: E402
+=======
+from app.db.session import SessionLocal  # noqa: E402
+from app.db.models import EntryExitLog, OccupancySnapshot, ParkingZone  # noqa: E402
+>>>>>>> origin/master
 from app.features.forecast.services.retrain import _category_split  # noqa: E402
 
 logger = logging.getLogger(__name__)

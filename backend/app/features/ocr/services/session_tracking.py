@@ -2,7 +2,11 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+<<<<<<< HEAD
 from app.core.models import ParkingSession
+=======
+from app.db.models import ParkingSession
+>>>>>>> origin/master
 
 
 def record_entry(db: Session, vehicle_id: int, zone_id: int, entry_time: datetime) -> None:

@@ -24,6 +24,7 @@ function ConfBar({ score }: { score: number }) {
   );
 }
 
+<<<<<<< HEAD
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -36,6 +37,8 @@ function formatCapturedAt(iso: string): string {
   return `${day}-${MONTHS[d.getMonth()]}-${d.getFullYear()}, ${time}`;
 }
 
+=======
+>>>>>>> origin/master
 function toDetection(row: PendingReview): Detection {
   return {
     plate_detected: row.plate_guess || '???',
@@ -148,7 +151,11 @@ export default function PendingReviewPage() {
                     <td style={{ fontSize: 12, textTransform: 'capitalize' }}>{r.vehicle_type || '—'}</td>
                     <td style={{ fontSize: 11, textTransform: 'uppercase' }}>{r.zone}</td>
                     <td style={{ fontSize: 12 }}>{r.event_type === 'entry' ? '→ IN' : '← OUT'}</td>
+<<<<<<< HEAD
                     <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatCapturedAt(r.captured_at)}</span></td>
+=======
+                    <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{new Date(r.captured_at).toLocaleString()}</span></td>
+>>>>>>> origin/master
                     <td style={{ minWidth: 80 }}><ConfBar score={r.confidence} /></td>
                     <td>
                       <button className="btn-primary" style={{ fontSize: 11, padding: '6px 12px' }} onClick={() => setReviewing(r)}>
