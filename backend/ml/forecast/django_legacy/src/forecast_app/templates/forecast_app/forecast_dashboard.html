@@ -1,0 +1,2255 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PTMI Parking Forecast Dashboard</title>
+
+    <style>
+        :root {
+            --mattel-red: #E5002B;
+            --mattel-red-dark: #B80022;
+            --mattel-red-soft: #FFF0F3;
+            --ink: #101828;
+            --navy: #102A43;
+            --blue: #1F75D8;
+            --teal: #159A72;
+            --amber: #F5A400;
+            --purple: #7A3FF2;
+            --slate: #475467;
+            --bg: #F7F8FA;
+            --card: #FFFFFF;
+            --text: #172033;
+            --muted: #667085;
+            --border: #E4E7EC;
+            --shadow: 0 7px 20px rgba(16, 24, 40, 0.07);
+            --normal-bg: #E5F6EE;
+            --normal-text: #087443;
+            --warning-bg: #FFF3D6;
+            --warning-text: #946200;
+            --full-bg: #FFE1E6;
+            --full-text: #B80022;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top left, rgba(229, 0, 43, 0.055), transparent 28%),
+                linear-gradient(180deg, #FFFFFF 0%, var(--bg) 100%);
+            color: var(--text);
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+        }
+
+        body {
+            padding: 0;
+        }
+
+        .dashboard {
+            width: 100%;
+            height: 100vh;
+            display: grid;
+            grid-template-rows: 68px 36px 88px minmax(0, 1fr) 18px;
+            gap: 9px;
+        }
+
+        .dashboard.alert-closed {
+            grid-template-rows: 68px 0px 94px minmax(0, 1fr) 18px;
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 18px;
+            padding: 0 24px;
+            background: linear-gradient(135deg, #E5002B 0%, #B80022 58%, #870019 100%);
+            color: #FFFFFF;
+            box-shadow: 0 8px 22px rgba(184, 0, 34, 0.22);
+        }
+
+        .title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .title-text {
+            min-width: 0;
+        }
+
+        .title-wrap h1 {
+            margin: 0;
+            color: #FFFFFF;
+            font-size: 27px;
+            line-height: 1;
+            font-weight: 850;
+            letter-spacing: -0.045em;
+            white-space: nowrap;
+        }
+
+        .title-wrap p {
+            margin: 6px 0 0;
+            color: rgba(255, 255, 255, 0.88);
+            font-size: 0.80rem;
+            font-weight: 500;
+        }
+
+        .top-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-box {
+            height: 40px;
+            min-width: 230px;
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            background: #FFFFFF;
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            border-radius: 10px;
+            box-shadow: 0 7px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .control-box.small {
+            min-width: 210px;
+        }
+
+        .control-box input,
+        .control-box select {
+            width: 100%;
+            height: 100%;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--ink);
+            font-size: 0.84rem;
+            font-weight: 760;
+            cursor: pointer;
+        }
+
+        .period-control {
+            display: none;
+            width: 100%;
+        }
+
+        .period-control.active {
+            display: block;
+        }
+
+        .export-report-btn,
+        .help-guide-btn {
+            height: 40px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.42);
+            background: rgba(255, 255, 255, 0.08);
+            color: #FFFFFF;
+            font-size: 0.80rem;
+            font-weight: 800;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: 0.18s ease;
+        }
+
+        .export-report-btn {
+            min-width: 128px;
+            text-decoration: none;
+        }
+
+        .help-guide-btn {
+            width: 42px;
+            min-width: 42px;
+            padding: 0;
+            border-radius: 50%;
+            font-size: 1.05rem;
+        }
+
+        .export-report-btn:hover,
+        .help-guide-btn:hover {
+            background: rgba(255, 255, 255, 0.16);
+        }
+
+        .export-report-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .risk-alert {
+            margin: 0 24px;
+            height: 36px;
+            border: 1px solid rgba(229, 0, 43, 0.20);
+            background: rgba(229, 0, 43, 0.045);
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0 13px;
+            color: var(--mattel-red-dark);
+            font-size: 0.78rem;
+            font-weight: 650;
+            overflow: hidden;
+            transition: 0.18s ease;
+        }
+
+        .dashboard.alert-closed .risk-alert {
+            height: 0;
+            min-height: 0;
+            padding: 0;
+            margin: 0 24px;
+            border: none;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .risk-alert-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .risk-alert-left svg {
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+        }
+
+        .risk-alert strong {
+            font-weight: 850;
+            color: var(--mattel-red);
+        }
+
+        .risk-alert-close {
+            border: none;
+            background: transparent;
+            color: var(--navy);
+            font-size: 1rem;
+            cursor: pointer;
+            line-height: 1;
+            opacity: 0.75;
+        }
+
+        .risk-alert-close:hover {
+            opacity: 1;
+        }
+
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 13px;
+            padding: 0 24px;
+        }
+
+        .kpi-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 13px;
+            box-shadow: var(--shadow);
+            padding: 11px 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-width: 0;
+            transition: all 0.18s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-card::after {
+            content: "";
+            position: absolute;
+            right: -22px;
+            bottom: -26px;
+            width: 86px;
+            height: 86px;
+            border-radius: 50%;
+            background: rgba(229, 0, 43, 0.055);
+            pointer-events: none;
+        }
+
+        .kpi-card.active-daily {
+            background: linear-gradient(135deg, var(--mattel-red) 0%, var(--mattel-red-dark) 100%);
+            border-color: var(--mattel-red);
+            box-shadow: 0 11px 24px rgba(229, 0, 43, 0.20);
+        }
+
+        .kpi-card.active-weekly {
+            background: linear-gradient(135deg, #111827 0%, #3B0A14 55%, var(--mattel-red-dark) 100%);
+            border-color: #3B0A14;
+            box-shadow: 0 11px 24px rgba(59, 10, 20, 0.20);
+        }
+
+        .kpi-card.active-monthly {
+            background: linear-gradient(135deg, var(--navy) 0%, #192E46 45%, var(--mattel-red) 100%);
+            border-color: var(--navy);
+            box-shadow: 0 11px 24px rgba(16, 42, 67, 0.18);
+        }
+
+        .kpi-card.active-daily::after,
+        .kpi-card.active-weekly::after,
+        .kpi-card.active-monthly::after {
+            background: rgba(255, 255, 255, 0.13);
+        }
+
+        .kpi-label {
+            color: var(--ink);
+            font-weight: 780;
+            font-size: 0.8rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .kpi-value {
+            margin-top: 5px;
+            color: var(--ink);
+            font-size: 1.42rem;
+            font-weight: 850;
+            line-height: 1;
+            position: relative;
+            z-index: 1;
+        }
+
+        .kpi-sub {
+            margin-top: 5px;
+            color: var(--mattel-red);
+            font-size: 0.66rem;
+            font-weight: 750;
+            position: relative;
+            z-index: 1;
+        }
+
+        .kpi-sub.red {
+            color: var(--mattel-red);
+        }
+
+        .kpi-card.active-daily .kpi-label,
+        .kpi-card.active-weekly .kpi-label,
+        .kpi-card.active-monthly .kpi-label,
+        .kpi-card.active-daily .kpi-value,
+        .kpi-card.active-weekly .kpi-value,
+        .kpi-card.active-monthly .kpi-value {
+            color: #FFFFFF;
+        }
+
+        .kpi-card.active-daily .kpi-sub,
+        .kpi-card.active-weekly .kpi-sub,
+        .kpi-card.active-monthly .kpi-sub {
+            color: rgba(255, 255, 255, 0.92);
+        }
+
+        .main-content {
+            min-height: 0;
+            display: grid;
+            grid-template-rows: 54% 46%;
+            gap: 11px;
+            padding: 0 24px;
+        }
+
+        .upper-grid {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 50% 23% 27%;
+            gap: 11px;
+        }
+
+        .lower-grid {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 32% 68%;
+            gap: 11px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 13px;
+            box-shadow: var(--shadow);
+            padding: 12px 13px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            height: 22px;
+        }
+
+        .card-title {
+            margin: 0;
+            color: var(--ink);
+            font-size: 0.86rem;
+            font-weight: 850;
+            line-height: 1.1;
+        }
+
+        .card-title::before {
+            content: "";
+            display: inline-block;
+            width: 6px;
+            height: 14px;
+            margin-right: 7px;
+            border-radius: 999px;
+            background: var(--mattel-red);
+            vertical-align: -2px;
+        }
+
+        .card-sub {
+            color: var(--muted);
+            font-size: 0.64rem;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+
+        .chart-area {
+            width: 100%;
+            height: calc(100% - 28px);
+            min-height: 0;
+        }
+
+        .trend-card .chart-area {
+            padding: 2px 2px 0 0;
+        }
+
+        .distribution-card {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+        }
+
+        .donut-layout {
+            min-height: 0;
+            height: calc(100% - 2px);
+            display: grid;
+            grid-template-columns: 54% 46%;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .donut-box {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .donut-box canvas {
+            max-width: 172px;
+            max-height: 172px;
+        }
+
+        .legend-stack {
+            display: grid;
+            gap: 8px;
+            font-size: 0.72rem;
+        }
+
+        .legend-item {
+            display: grid;
+            grid-template-columns: 8px minmax(0, 1fr) auto;
+            gap: 7px;
+            align-items: center;
+            color: var(--text);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .legend-item strong {
+            color: var(--ink);
+            font-size: 0.74rem;
+        }
+
+        .insight-list {
+            height: calc(100% - 28px);
+            display: grid;
+            gap: 12px;
+            align-content: center;
+        }
+
+        .insight-item {
+            display: grid;
+            grid-template-columns: 48px minmax(0, 1fr);
+            gap: 10px;
+            align-items: center;
+        }
+
+        .insight-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            border: 1px solid rgba(16, 24, 40, 0.05);
+        }
+
+        .insight-icon svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .insight-icon.blue {
+            background: var(--mattel-red-soft);
+        }
+
+        .insight-icon.amber {
+            background: #FFF7E6;
+        }
+
+        .insight-icon.green {
+            background: #E8F7F0;
+        }
+
+        .insight-text {
+            min-width: 0;
+        }
+
+        .insight-text strong {
+            display: block;
+            color: var(--ink);
+            font-size: 0.76rem;
+            margin-bottom: 3px;
+        }
+
+        .insight-text span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.68rem;
+            line-height: 1.28;
+        }
+
+        .area-card .chart-area {
+            height: calc(100% - 28px);
+            padding: 0 16px 2px 6px;
+        }
+
+        .preview-card {
+            padding: 12px 13px;
+        }
+
+        .preview-table-wrap {
+            height: calc(100% - 28px);
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            height: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        th {
+            background: #FAFAFB;
+            color: var(--ink);
+            font-weight: 850;
+            font-size: 0.55rem;
+            padding: 4px 5px;
+            height: 21px;
+        }
+
+        td {
+            font-size: 0.53rem;
+            padding: 3px 5px;
+            color: var(--text);
+            height: 19px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-width: 42px;
+            padding: 2px 5px;
+            border-radius: 999px;
+            font-size: 0.46rem;
+            font-weight: 850;
+        }
+
+        .status-normal,
+        .status-good,
+        .status-stable {
+            background: var(--normal-bg);
+            color: var(--normal-text);
+        }
+
+        .status-warning,
+        .status-moderate {
+            background: var(--warning-bg);
+            color: var(--warning-text);
+        }
+
+        .status-full,
+        .status-high,
+        .status-increase {
+            background: var(--full-bg);
+            color: var(--full-text);
+        }
+
+        .status-decrease {
+            background: #EAF3FF;
+            color: var(--blue);
+        }
+
+        .status-start {
+            background: #F2F4F7;
+            color: var(--slate);
+        }
+
+        .preview-table-wrap th:nth-child(1),
+        .preview-table-wrap td:nth-child(1) {
+            width: 12%;
+        }
+
+        .preview-table-wrap th:nth-child(2),
+        .preview-table-wrap td:nth-child(2) {
+            width: 7%;
+        }
+
+        .preview-table-wrap th,
+        .preview-table-wrap td {
+            width: 6.23%;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            color: var(--muted);
+            font-size: 0.66rem;
+            padding: 0 24px;
+        }
+
+        .footer span::before {
+            content: "• ";
+            color: var(--mattel-red);
+            font-weight: 900;
+        }
+
+        .hidden-data {
+            display: none;
+        }
+
+        .guide-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(16, 24, 40, 0.54);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 9999;
+        }
+
+        .guide-overlay.active {
+            display: flex;
+        }
+
+        .guide-modal {
+            width: min(860px, 96vw);
+            max-height: 88vh;
+            background: #FFFFFF;
+            border-radius: 18px;
+            box-shadow: 0 28px 70px rgba(16, 24, 40, 0.34);
+            overflow: hidden;
+            border: 1px solid rgba(228, 231, 236, 0.95);
+        }
+
+        .guide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 22px;
+            background: linear-gradient(135deg, #E5002B 0%, #B80022 70%, #870019 100%);
+            color: #FFFFFF;
+        }
+
+        .guide-header h2 {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 850;
+            letter-spacing: -0.02em;
+        }
+
+        .guide-header p {
+            margin: 4px 0 0;
+            color: rgba(255, 255, 255, 0.86);
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+
+        .guide-close-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.32);
+            background: rgba(255, 255, 255, 0.12);
+            color: #FFFFFF;
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .guide-close-btn:hover {
+            background: rgba(255, 255, 255, 0.20);
+        }
+
+        .guide-body {
+            padding: 18px 22px 22px;
+            overflow-y: auto;
+            max-height: calc(88vh - 76px);
+        }
+
+        .guide-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .guide-section {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px;
+            background: #FFFFFF;
+        }
+
+        .guide-section.full {
+            grid-column: 1 / -1;
+        }
+
+        .guide-section h3 {
+            margin: 0 0 8px;
+            color: var(--ink);
+            font-size: 0.86rem;
+            font-weight: 850;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .guide-section h3::before {
+            content: "";
+            width: 6px;
+            height: 14px;
+            border-radius: 999px;
+            background: var(--mattel-red);
+            display: inline-block;
+        }
+
+        .guide-section p {
+            margin: 0 0 8px;
+            color: var(--muted);
+            font-size: 0.74rem;
+            line-height: 1.45;
+        }
+
+        .guide-list {
+            margin: 0;
+            padding-left: 16px;
+            color: var(--muted);
+            font-size: 0.72rem;
+            line-height: 1.5;
+        }
+
+        .guide-list strong {
+            color: var(--ink);
+        }
+
+        .guide-badges {
+            display: grid;
+            gap: 7px;
+            margin-top: 8px;
+        }
+
+        .guide-badge-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.72rem;
+            color: var(--muted);
+        }
+
+        .guide-badge-row .status-badge {
+            min-width: 70px;
+            font-size: 0.55rem;
+        }
+
+        .guide-note {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 13px;
+            background: var(--mattel-red-soft);
+            color: var(--mattel-red-dark);
+            border: 1px solid rgba(229, 0, 43, 0.14);
+            font-size: 0.74rem;
+            line-height: 1.45;
+        }
+
+        .guide-note strong {
+            color: var(--mattel-red);
+        }
+
+        @media (max-width: 1200px) {
+            html,
+            body {
+                overflow: auto;
+                height: auto;
+            }
+
+            .dashboard {
+                height: auto;
+                grid-template-rows: auto;
+            }
+
+            .dashboard.alert-closed {
+                grid-template-rows: auto;
+            }
+
+            .topbar {
+                grid-template-columns: 1fr;
+                padding: 14px 18px;
+            }
+
+            .title-wrap {
+                align-items: flex-start;
+            }
+
+            .title-wrap h1 {
+                white-space: normal;
+                font-size: 24px;
+            }
+
+            .kpi-row,
+            .upper-grid,
+            .lower-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .main-content {
+                grid-template-rows: auto;
+            }
+
+            .chart-area {
+                height: 260px;
+            }
+
+            .top-controls {
+                flex-wrap: wrap;
+            }
+
+            .risk-alert {
+                height: auto;
+                min-height: 36px;
+                padding: 8px 12px;
+            }
+
+            .dashboard.alert-closed .risk-alert {
+                height: 0;
+                min-height: 0;
+                padding: 0;
+            }
+
+            .guide-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media print {
+            .export-report-btn,
+            .help-guide-btn,
+            .risk-alert-close,
+            .guide-overlay {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard">
+        <header class="topbar">
+            <div class="title-wrap">
+                <div class="title-text">
+                    <h1>PTMI Parking Forecast Dashboard</h1>
+                    <p>Year {{ year }} &nbsp;•&nbsp; Predictive Analytics</p>
+                </div>
+            </div>
+
+            <div class="top-controls">
+                <div class="control-box">
+                    <input type="date" id="dailyDatePicker" class="period-control active" />
+                    <select id="weeklySelector" class="period-control"></select>
+                    <select id="monthlySelector" class="period-control"></select>
+                </div>
+
+                <div class="control-box small">
+                    <select id="forecastType">
+                        <option value="daily">Daily Forecast</option>
+                        <option value="weekly">Weekly Forecast</option>
+                        <option value="monthly">Monthly Forecast</option>
+                    </select>
+                </div>
+
+                <a class="export-report-btn" href="#" onclick="openManagementReport(event)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <path d="M14 2v6h6"></path>
+        <path d="M12 18v-6"></path>
+        <path d="M9 15l3 3 3-3"></path>
+    </svg>
+    Export PDF
+            </a>
+
+                <button class="help-guide-btn" type="button" onclick="openGuideModal()" title="Dashboard Guide">
+                    ?
+                </button>
+            </div>
+        </header>
+
+        <section class="risk-alert" id="riskAlert">
+            <div class="risk-alert-left">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#E5002B" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <path d="M12 9v4"></path>
+                    <path d="M12 17h.01"></path>
+                </svg>
+                <span id="riskAlertText">
+                    <strong>High Risk Alert:</strong> risk records detected in selected period
+                </span>
+            </div>
+
+            <button class="risk-alert-close" type="button" onclick="closeRiskAlert()">
+                ×
+            </button>
+        </section>
+
+        <section class="kpi-row">
+            <div class="kpi-card daily active-daily" id="dailyKpi">
+                <div class="kpi-label">Daily Records</div>
+                <div class="kpi-value" id="dailyKpiValue">{{ daily_count }}</div>
+                <div class="kpi-sub" id="dailyKpiSub">Selected day forecast</div>
+            </div>
+
+            <div class="kpi-card weekly" id="weeklyKpi">
+                <div class="kpi-label">Weekly Records</div>
+                <div class="kpi-value" id="weeklyKpiValue">{{ weekly_count }}</div>
+                <div class="kpi-sub" id="weeklyKpiSub">Weekly forecast rows</div>
+            </div>
+
+            <div class="kpi-card monthly" id="monthlyKpi">
+                <div class="kpi-label">Monthly Records</div>
+                <div class="kpi-value" id="monthlyKpiValue">{{ monthly_count }}</div>
+                <div class="kpi-sub" id="monthlyKpiSub">Monthly forecast rows</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Avg. Occupancy</div>
+                <div class="kpi-value" id="avgOccupancyValue">0%</div>
+                <div class="kpi-sub">Based on selected view</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label" id="riskKpiLabel">Risk Areas</div>
+                <div class="kpi-value" id="riskAreaValue">0</div>
+                <div class="kpi-sub red" id="riskKpiSub">Full / Warning status</div>
+            </div>
+        </section>
+
+        <main class="main-content">
+            <section class="upper-grid">
+                <section class="card trend-card">
+                    <div class="card-header">
+                        <h2 class="card-title">Parking Occupancy Forecast Trend</h2>
+                        <span class="card-sub" id="trendSubtitle">Daily View</span>
+                    </div>
+
+                    <div class="chart-area">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </section>
+
+                <section class="card distribution-card">
+                    <div class="card-header">
+                        <h2 class="card-title" id="distributionTitle">Occupancy Status Distribution</h2>
+                        <span class="card-sub" id="distributionSubtitle">Operational Risk</span>
+                    </div>
+
+                    <div class="donut-layout">
+                        <div class="donut-box">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+
+                        <div class="legend-stack" id="distributionLegend"></div>
+                    </div>
+                </section>
+
+                <section class="card insight-card">
+                    <div class="card-header">
+                        <h2 class="card-title" id="insightTitle">Forecast Insights</h2>
+                        <span class="card-sub" id="insightSubtitle">Auto summary</span>
+                    </div>
+
+                    <div class="insight-list">
+                        <div class="insight-item">
+                            <div class="insight-icon blue">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#E5002B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 12h18"></path>
+                                    <path d="M7 8v8"></path>
+                                    <path d="M12 6v10"></path>
+                                    <path d="M17 10v6"></path>
+                                </svg>
+                            </div>
+                            <div class="insight-text">
+                                <strong id="insightOneTitle">Full Area Count</strong>
+                                <span id="peakAreaText">-</span>
+                            </div>
+                        </div>
+
+                        <div class="insight-item">
+                            <div class="insight-icon amber">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#F5A400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                    <path d="M12 9v4"></path>
+                                    <path d="M12 17h.01"></path>
+                                </svg>
+                            </div>
+                            <div class="insight-text">
+                                <strong id="insightTwoTitle">Warning Area Count</strong>
+                                <span id="congestionText">-</span>
+                            </div>
+                        </div>
+
+                        <div class="insight-item">
+                            <div class="insight-icon green">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="#159A72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z"></path>
+                                    <path d="M9 12l2 2 4-4"></path>
+                                </svg>
+                            </div>
+                            <div class="insight-text">
+                                <strong id="insightThreeTitle">Recommended Action</strong>
+                                <span id="actionText">Monitor selected risk areas</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <section class="lower-grid">
+                <section class="card area-card">
+                    <div class="card-header">
+                        <h2 class="card-title">Area Performance</h2>
+                        <span class="card-sub" id="areaSubtitle">Selected period</span>
+                    </div>
+
+                    <div class="chart-area">
+                        <canvas id="areaChart"></canvas>
+                    </div>
+                </section>
+
+                <section class="card preview-card">
+                    <div class="card-header">
+                        <h2 class="card-title" id="previewTitle">Forecast Preview</h2>
+                        <span class="card-sub" id="previewSubtitle">Next 7 records</span>
+                    </div>
+
+                    <div class="preview-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th id="periodColumn">Date</th>
+                                    <th>Total</th>
+                                    <th>P1W Av.</th>
+                                    <th>P1W St.</th>
+                                    <th>P1E Av.</th>
+                                    <th>P1E St.</th>
+                                    <th>P2W Av.</th>
+                                    <th>P2W St.</th>
+                                    <th>P2E Av.</th>
+                                    <th>P2E St.</th>
+                                    <th>P3W Av.</th>
+                                    <th>P3W St.</th>
+                                    <th>P3E Av.</th>
+                                    <th>P3E St.</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="previewBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <span>Forecast horizon: Jun – Dec 2026</span>
+            <span>Data refreshed: 2026 Forecast Dataset</span>
+        </footer>
+    </div>
+
+    <div class="guide-overlay" id="guideOverlay" onclick="closeGuideModalOnOverlay(event)">
+        <div class="guide-modal">
+            <div class="guide-header">
+                <div>
+                    <h2>Dashboard Guide</h2>
+                    <p>Quick explanation for daily, weekly, monthly forecast, status meaning, and chart reading.</p>
+                </div>
+
+                <button class="guide-close-btn" type="button" onclick="closeGuideModal()">×</button>
+            </div>
+
+            <div class="guide-body">
+                <div class="guide-grid">
+                    <div class="guide-section full">
+                        <h3>About This Dashboard</h3>
+                        <p>
+                            This dashboard provides parking demand forecasting for daily, weekly, and monthly periods.
+                            It helps management monitor parking occupancy, area conditions, and future parking demand.
+                        </p>
+                        <p>
+                            Daily is for operational risk, weekly is for monitoring, and monthly is for planning trend analysis.
+                        </p>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>Daily Forecast</h3>
+                        <p>Daily forecast is used for operational risk monitoring.</p>
+
+                        <div class="guide-badges">
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-normal">Normal</span>
+                                <span>Area is still safe and available.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-warning">Warning</span>
+                                <span>Area is getting close to full capacity.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-full">Full</span>
+                                <span>Area is full or has no remaining slot.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>Weekly Forecast</h3>
+                        <p>Weekly forecast is used for monitoring demand contribution across several weeks.</p>
+
+                        <div class="guide-badges">
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-good">Good</span>
+                                <span>Area has relatively low contribution/demand.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-moderate">Moderate</span>
+                                <span>Area needs monitoring.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-high">High</span>
+                                <span>Area has high contribution/demand and needs attention.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>Monthly Forecast</h3>
+                        <p>
+                            Monthly forecast is used for planning and availability trend analysis.
+                            Monthly status is based on the Av. value shown in the table compared with the previous month.
+                        </p>
+
+                        <div class="guide-badges">
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-start">Start</span>
+                                <span>First month used as comparison baseline.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-increase">Increase</span>
+                                <span>Av. value increased from previous month.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-decrease">Decrease</span>
+                                <span>Av. value decreased from previous month.</span>
+                            </div>
+                            <div class="guide-badge-row">
+                                <span class="status-badge status-stable">Stable</span>
+                                <span>Av. value is relatively unchanged.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>Area Performance</h3>
+                        <ul class="guide-list">
+                            <li><strong>Daily:</strong> compares remaining available slots. Colors follow Normal, Warning, and Full.</li>
+                            <li><strong>Weekly:</strong> compares area contribution percentage. Colors follow Good, Moderate, and High.</li>
+                            <li><strong>Monthly:</strong> compares availability contribution percentage. Colors follow Start, Increase, Decrease, and Stable.</li>
+                        </ul>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>Forecast Preview</h3>
+                        <ul class="guide-list">
+                            <li><strong>Daily:</strong> shows the next 7 days from the selected date.</li>
+                            <li><strong>Weekly:</strong> shows the next 7 weeks from the selected week.</li>
+                            <li><strong>Monthly:</strong> shows the next 7 months from the selected month.</li>
+                        </ul>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>Insights</h3>
+                        <ul class="guide-list">
+                            <li><strong>Daily Insights:</strong> summarize Full and Warning records for operational action.</li>
+                            <li><strong>Weekly Insights:</strong> summarize High and Moderate records for monitoring.</li>
+                            <li><strong>Monthly Insights:</strong> summarize Increase and Decrease records for planning.</li>
+                        </ul>
+                    </div>
+
+                    <div class="guide-section full">
+                        <h3>Simple Reading Concept</h3>
+                        <p>
+                            Daily is for operational risk, weekly is for monitoring, and monthly is for management planning.
+                            Therefore, the status labels are different in each mode.
+                        </p>
+
+                        <div class="guide-note">
+                            <strong>Note:</strong>
+                            Daily uses Normal, Warning, and Full because it represents operational condition.
+                            Weekly uses Good, Moderate, and High because it monitors weekly demand contribution.
+                            Monthly uses Start, Increase, Decrease, and Stable because it monitors Av. trend compared with previous month.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hidden-data">
+        <table id="dailySource">
+            <tbody>
+                {% for row in daily_forecast %}
+                <tr
+                    data-period="{{ row.ds|date:'Y-m-d' }}"
+                    data-label="{{ row.ds|date:'M d, Y' }}"
+                    data-total="{{ row.total_vehicles|floatformat:0 }}"
+
+                    data-p1w-pred="{{ row.P1W_predicted|floatformat:0 }}"
+                    data-p1w-avail="{{ row.P1W_available|floatformat:0 }}"
+                    data-p1w-status="{{ row.P1W_status }}"
+
+                    data-p1e-pred="{{ row.P1E_predicted|floatformat:0 }}"
+                    data-p1e-avail="{{ row.P1E_available|floatformat:0 }}"
+                    data-p1e-status="{{ row.P1E_status }}"
+
+                    data-p2w-pred="{{ row.P2W_predicted|floatformat:0 }}"
+                    data-p2w-avail="{{ row.P2W_available|floatformat:0 }}"
+                    data-p2w-status="{{ row.P2W_status }}"
+
+                    data-p2e-pred="{{ row.P2E_predicted|floatformat:0 }}"
+                    data-p2e-avail="{{ row.P2E_available|floatformat:0 }}"
+                    data-p2e-status="{{ row.P2E_status }}"
+
+                    data-p3w-pred="{{ row.P3W_predicted|floatformat:0 }}"
+                    data-p3w-avail="{{ row.P3W_available|floatformat:0 }}"
+                    data-p3w-status="{{ row.P3W_status }}"
+
+                    data-p3e-pred="{{ row.P3E_predicted|floatformat:0 }}"
+                    data-p3e-avail="{{ row.P3E_available|floatformat:0 }}"
+                    data-p3e-status="{{ row.P3E_status }}"
+                ></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <table id="weeklySource">
+            <tbody>
+                {% for row in weekly_forecast %}
+                <tr
+                    data-period="{{ row.week }}"
+                    data-label="W{{ row.week }}"
+                    data-total="{{ row.total_vehicles|floatformat:0 }}"
+
+                    data-p1w-pred="{{ row.P1W_predicted|floatformat:0 }}"
+                    data-p1w-avail="{{ row.P1W_available|floatformat:0 }}"
+                    data-p1w-status="{{ row.P1W_status }}"
+
+                    data-p1e-pred="{{ row.P1E_predicted|floatformat:0 }}"
+                    data-p1e-avail="{{ row.P1E_available|floatformat:0 }}"
+                    data-p1e-status="{{ row.P1E_status }}"
+
+                    data-p2w-pred="{{ row.P2W_predicted|floatformat:0 }}"
+                    data-p2w-avail="{{ row.P2W_available|floatformat:0 }}"
+                    data-p2w-status="{{ row.P2W_status }}"
+
+                    data-p2e-pred="{{ row.P2E_predicted|floatformat:0 }}"
+                    data-p2e-avail="{{ row.P2E_available|floatformat:0 }}"
+                    data-p2e-status="{{ row.P2E_status }}"
+
+                    data-p3w-pred="{{ row.P3W_predicted|floatformat:0 }}"
+                    data-p3w-avail="{{ row.P3W_available|floatformat:0 }}"
+                    data-p3w-status="{{ row.P3W_status }}"
+
+                    data-p3e-pred="{{ row.P3E_predicted|floatformat:0 }}"
+                    data-p3e-avail="{{ row.P3E_available|floatformat:0 }}"
+                    data-p3e-status="{{ row.P3E_status }}"
+                ></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <table id="monthlySource">
+            <tbody>
+                {% for row in monthly_forecast %}
+                <tr
+                    data-period="{{ row.month }}"
+                    data-label="{% if row.month == 6 %}June{% elif row.month == 7 %}July{% elif row.month == 8 %}August{% elif row.month == 9 %}September{% elif row.month == 10 %}October{% elif row.month == 11 %}November{% elif row.month == 12 %}December{% else %}Month {{ row.month }}{% endif %}"
+                    data-total="{{ row.total_vehicles|floatformat:0 }}"
+
+                    data-p1w-pred="{{ row.P1W_predicted|floatformat:0 }}"
+                    data-p1w-avail="{{ row.P1W_available|floatformat:0 }}"
+                    data-p1w-status="{{ row.P1W_status }}"
+
+                    data-p1e-pred="{{ row.P1E_predicted|floatformat:0 }}"
+                    data-p1e-avail="{{ row.P1E_available|floatformat:0 }}"
+                    data-p1e-status="{{ row.P1E_status }}"
+
+                    data-p2w-pred="{{ row.P2W_predicted|floatformat:0 }}"
+                    data-p2w-avail="{{ row.P2W_available|floatformat:0 }}"
+                    data-p2w-status="{{ row.P2W_status }}"
+
+                    data-p2e-pred="{{ row.P2E_predicted|floatformat:0 }}"
+                    data-p2e-avail="{{ row.P2E_available|floatformat:0 }}"
+                    data-p2e-status="{{ row.P2E_status }}"
+
+                    data-p3w-pred="{{ row.P3W_predicted|floatformat:0 }}"
+                    data-p3w-avail="{{ row.P3W_available|floatformat:0 }}"
+                    data-p3w-status="{{ row.P3W_status }}"
+
+                    data-p3e-pred="{{ row.P3E_predicted|floatformat:0 }}"
+                    data-p3e-avail="{{ row.P3E_available|floatformat:0 }}"
+                    data-p3e-status="{{ row.P3E_status }}"
+                ></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        const forecastType = document.getElementById("forecastType");
+        const dailyDatePicker = document.getElementById("dailyDatePicker");
+        const weeklySelector = document.getElementById("weeklySelector");
+        const monthlySelector = document.getElementById("monthlySelector");
+        const previewBody = document.getElementById("previewBody");
+
+        const dailyKpi = document.getElementById("dailyKpi");
+        const weeklyKpi = document.getElementById("weeklyKpi");
+        const monthlyKpi = document.getElementById("monthlyKpi");
+
+        const AREA_CONFIG = [
+            { code: "P1W", pred: "p1wPred", avail: "p1wAvail", status: "p1wStatus" },
+            { code: "P1E", pred: "p1ePred", avail: "p1eAvail", status: "p1eStatus" },
+            { code: "P2W", pred: "p2wPred", avail: "p2wAvail", status: "p2wStatus" },
+            { code: "P2E", pred: "p2ePred", avail: "p2eAvail", status: "p2eStatus" },
+            { code: "P3W", pred: "p3wPred", avail: "p3wAvail", status: "p3wStatus" },
+            { code: "P3E", pred: "p3ePred", avail: "p3eAvail", status: "p3eStatus" },
+        ];
+
+        const CONTRIBUTION_COLORS = ["#E5002B", "#B80022", "#102A43", "#159A72", "#F5A400", "#7A3FF2"];
+
+        let trendChart;
+        let distributionChart;
+        let areaChart;
+
+        const DAILY_COUNT = Number("{{ daily_count|default:0 }}") || 0;
+        const WEEKLY_COUNT = Number("{{ weekly_count|default:0 }}") || 0;
+        const MONTHLY_COUNT = Number("{{ monthly_count|default:0 }}") || 0;
+
+        function parseNumber(value) {
+            if (value === null || value === undefined) return 0;
+            return Number(String(value).replace(/,/g, "").trim()) || 0;
+        }
+
+        function rowsFromSource(sourceId) {
+            return Array.from(document.querySelectorAll(`#${sourceId} tbody tr`)).map(row => ({
+                period: row.dataset.period,
+                label: row.dataset.label,
+                total: parseNumber(row.dataset.total),
+
+                p1wPred: parseNumber(row.dataset.p1wPred),
+                p1wAvail: parseNumber(row.dataset.p1wAvail),
+                p1wStatus: row.dataset.p1wStatus || "Normal",
+
+                p1ePred: parseNumber(row.dataset.p1ePred),
+                p1eAvail: parseNumber(row.dataset.p1eAvail),
+                p1eStatus: row.dataset.p1eStatus || "Normal",
+
+                p2wPred: parseNumber(row.dataset.p2wPred),
+                p2wAvail: parseNumber(row.dataset.p2wAvail),
+                p2wStatus: row.dataset.p2wStatus || "Normal",
+
+                p2ePred: parseNumber(row.dataset.p2ePred),
+                p2eAvail: parseNumber(row.dataset.p2eAvail),
+                p2eStatus: row.dataset.p2eStatus || "Normal",
+
+                p3wPred: parseNumber(row.dataset.p3wPred),
+                p3wAvail: parseNumber(row.dataset.p3wAvail),
+                p3wStatus: row.dataset.p3wStatus || "Normal",
+
+                p3ePred: parseNumber(row.dataset.p3ePred),
+                p3eAvail: parseNumber(row.dataset.p3eAvail),
+                p3eStatus: row.dataset.p3eStatus || "Normal",
+            }));
+        }
+
+        const DATA = {
+            daily: rowsFromSource("dailySource"),
+            weekly: rowsFromSource("weeklySource"),
+            monthly: rowsFromSource("monthlySource"),
+        };
+
+        function openGuideModal() {
+            document.getElementById("guideOverlay").classList.add("active");
+        }
+
+        function closeGuideModal() {
+            document.getElementById("guideOverlay").classList.remove("active");
+        }
+
+        function closeGuideModalOnOverlay(event) {
+            if (event.target.id === "guideOverlay") {
+                closeGuideModal();
+            }
+        }
+
+        document.addEventListener("keydown", function(event) {
+            if (event.key === "Escape") {
+                closeGuideModal();
+            }
+        });
+
+        function getCurrentPeriodValue(type) {
+            if (type === "daily") return dailyDatePicker.value;
+            if (type === "weekly") return weeklySelector.value;
+            return monthlySelector.value;
+        }
+
+        function getSelectedIndex(type) {
+            const selectedValue = getCurrentPeriodValue(type);
+            const rows = DATA[type];
+            const index = rows.findIndex(row => String(row.period) === String(selectedValue));
+            return index >= 0 ? index : 0;
+        }
+
+        function getSelectedWindow(type) {
+            const rows = DATA[type];
+            const index = getSelectedIndex(type);
+            return rows.slice(index, index + 7);
+        }
+
+        function setActiveControls(type) {
+            dailyDatePicker.classList.toggle("active", type === "daily");
+            weeklySelector.classList.toggle("active", type === "weekly");
+            monthlySelector.classList.toggle("active", type === "monthly");
+        }
+
+        function setKpiActive(type) {
+            dailyKpi.classList.remove("active-daily");
+            weeklyKpi.classList.remove("active-weekly");
+            monthlyKpi.classList.remove("active-monthly");
+
+            if (type === "daily") dailyKpi.classList.add("active-daily");
+            if (type === "weekly") weeklyKpi.classList.add("active-weekly");
+            if (type === "monthly") monthlyKpi.classList.add("active-monthly");
+        }
+
+        function initSelectors() {
+            if (DATA.daily.length) {
+                dailyDatePicker.min = DATA.daily[0].period;
+                dailyDatePicker.max = DATA.daily[DATA.daily.length - 1].period;
+                dailyDatePicker.value = DATA.daily[0].period;
+            }
+
+            weeklySelector.innerHTML = "";
+            DATA.weekly.forEach(row => {
+                const option = document.createElement("option");
+                option.value = row.period;
+                option.textContent = row.label;
+                weeklySelector.appendChild(option);
+            });
+
+            monthlySelector.innerHTML = "";
+            DATA.monthly.forEach(row => {
+                const option = document.createElement("option");
+                option.value = row.period;
+                option.textContent = row.label;
+                monthlySelector.appendChild(option);
+            });
+        }
+
+        function cleanClassText(value) {
+            return String(value || "").trim().toLowerCase().replace(/\s+/g, "-");
+        }
+
+        function statusClass(status) {
+            return `status-${cleanClassText(status)}`;
+        }
+
+        function buildStatus(status) {
+            return `<span class="status-badge ${statusClass(status)}">${status}</span>`;
+        }
+
+        function countDailyStatuses(rows) {
+            const counts = { Normal: 0, Warning: 0, Full: 0 };
+
+            rows.forEach(row => {
+                AREA_CONFIG.forEach(area => {
+                    const status = row[area.status];
+                    if (counts[status] !== undefined) counts[status]++;
+                });
+            });
+
+            return counts;
+        }
+
+        function percentage(value, total) {
+            if (!total) return 0;
+            return Math.round((value / total) * 100);
+        }
+
+        function sumAreaPredictions(rows) {
+            return AREA_CONFIG.map(area => {
+                return rows.reduce((sum, row) => sum + (row[area.pred] || 0), 0);
+            });
+        }
+
+        function getPredictionContributionValues(row) {
+            const values = AREA_CONFIG.map(area => row[area.pred] || 0);
+            const total = values.reduce((sum, value) => sum + value, 0);
+
+            if (!total) {
+                return values.map(() => 0);
+            }
+
+            return values.map(value => Math.round((value / total) * 100));
+        }
+
+        function getAvailableContributionValues(row) {
+            const values = AREA_CONFIG.map(area => row[area.avail] || 0);
+            const total = values.reduce((sum, value) => sum + value, 0);
+
+            if (!total) {
+                return values.map(() => 0);
+            }
+
+            return values.map(value => Math.round((value / total) * 100));
+        }
+
+        function getAreaLevel(row, area) {
+            const contributionValues = getPredictionContributionValues(row);
+            const index = AREA_CONFIG.findIndex(item => item.code === area.code);
+            const contribution = contributionValues[index] || 0;
+
+            if (contribution >= 18) return "High";
+            if (contribution >= 15) return "Moderate";
+            return "Good";
+        }
+
+        function countWeeklyLevels(rows) {
+            const counts = { Good: 0, Moderate: 0, High: 0 };
+
+            rows.forEach(row => {
+                AREA_CONFIG.forEach(area => {
+                    const level = getAreaLevel(row, area);
+                    counts[level]++;
+                });
+            });
+
+            return counts;
+        }
+
+        function getAreaLevelColor(level) {
+            if (level === "High") return "#E5002B";
+            if (level === "Moderate") return "#F5A400";
+            return "#159A72";
+        }
+
+        function getAreaRawStatusColor(status) {
+            const statusText = String(status || "").toLowerCase();
+
+            if (statusText === "normal") return "#159A72";
+            if (statusText === "warning") return "#F5A400";
+            if (statusText === "full") return "#E5002B";
+
+            return "#102A43";
+        }
+
+        function getMonthlyTrend(row, area) {
+            const rows = DATA.monthly;
+            const index = rows.findIndex(item => String(item.period) === String(row.period));
+
+            if (index <= 0) return "Start";
+
+            const previous = rows[index - 1];
+
+            const currentValue = row[area.avail] || 0;
+            const previousValue = previous[area.avail] || 0;
+
+            if (previousValue <= 0 && currentValue > 0) return "Increase";
+
+            const changeRatio = (currentValue - previousValue) / Math.max(previousValue, 1);
+
+            if (changeRatio > 0.02) return "Increase";
+            if (changeRatio < -0.02) return "Decrease";
+            return "Stable";
+        }
+
+        function countMonthlyTrends(rows) {
+            const counts = { Start: 0, Increase: 0, Decrease: 0, Stable: 0 };
+
+            rows.forEach(row => {
+                AREA_CONFIG.forEach(area => {
+                    const trend = getMonthlyTrend(row, area);
+                    if (counts[trend] !== undefined) counts[trend]++;
+                });
+            });
+
+            return counts;
+        }
+
+        function getMonthlyTrendColor(trend) {
+            if (trend === "Increase") return "#E5002B";
+            if (trend === "Decrease") return "#1F75D8";
+            if (trend === "Stable") return "#159A72";
+            return "#667085";
+        }
+
+        function getDisplayStatus(type, row, area) {
+            if (type === "daily") {
+                return row[area.status] || "Normal";
+            }
+
+            if (type === "weekly") {
+                return getAreaLevel(row, area);
+            }
+
+            return getMonthlyTrend(row, area);
+        }
+
+        function buildDisplayStatus(type, row, area) {
+            return buildStatus(getDisplayStatus(type, row, area));
+        }
+
+        function updateRiskAlert(type, rows) {
+            const alertText = document.getElementById("riskAlertText");
+
+            if (!alertText || !rows.length) return;
+
+            if (type === "daily") {
+                const counts = countDailyStatuses(rows);
+                const riskTotal = counts.Warning + counts.Full;
+
+                if (riskTotal >= 20) {
+                    alertText.innerHTML = `<strong>High Risk Alert:</strong> ${riskTotal} warning/full records detected in selected period`;
+                } else if (riskTotal >= 10) {
+                    alertText.innerHTML = `<strong>Moderate Risk Alert:</strong> ${riskTotal} warning/full records detected in selected period`;
+                } else if (riskTotal > 0) {
+                    alertText.innerHTML = `<strong>Low Risk Alert:</strong> ${riskTotal} warning/full records detected in selected period`;
+                } else {
+                    alertText.innerHTML = `<strong>Stable Condition:</strong> no warning/full records detected in selected period`;
+                }
+
+                return;
+            }
+
+            if (type === "weekly") {
+                const weeklyCounts = countWeeklyLevels(rows);
+
+                if (weeklyCounts.High > 0) {
+                    alertText.innerHTML = `<strong>Weekly Monitoring Summary:</strong> review High and Moderate areas in the weekly preview table`;
+                } else if (weeklyCounts.Moderate > 0) {
+                    alertText.innerHTML = `<strong>Weekly Monitoring Summary:</strong> moderate monitoring records detected in selected 7-week period`;
+                } else {
+                    alertText.innerHTML = `<strong>Weekly Monitoring Summary:</strong> selected weekly period is stable`;
+                }
+
+                return;
+            }
+
+            const monthlyCounts = countMonthlyTrends(rows);
+
+            if (monthlyCounts.Increase > 0) {
+                alertText.innerHTML = `<strong>Monthly Planning Summary:</strong> review Increase and Decrease trends in the monthly preview table`;
+            } else if (monthlyCounts.Decrease > 0) {
+                alertText.innerHTML = `<strong>Monthly Planning Summary:</strong> selected monthly window shows decreasing trend records`;
+            } else {
+                alertText.innerHTML = `<strong>Monthly Planning Summary:</strong> selected monthly period is stable`;
+            }
+        }
+
+        function closeRiskAlert() {
+            const dashboard = document.querySelector(".dashboard");
+
+            dashboard.classList.add("alert-closed");
+
+            setTimeout(() => {
+                if (trendChart) trendChart.resize();
+                if (distributionChart) distributionChart.resize();
+                if (areaChart) areaChart.resize();
+            }, 120);
+        }
+
+        function updateKpi(type, rows) {
+            setKpiActive(type);
+
+            const selectedTotal = rows.length ? rows[0].total : 0;
+            const totalWindow = rows.reduce((sum, row) => sum + row.total, 0);
+            const avgTotal = rows.length ? Math.round(totalWindow / rows.length) : 0;
+
+            document.getElementById("dailyKpiValue").textContent =
+                type === "daily" ? selectedTotal.toLocaleString() : DAILY_COUNT.toLocaleString();
+
+            document.getElementById("weeklyKpiValue").textContent =
+                type === "weekly" ? selectedTotal.toLocaleString() : WEEKLY_COUNT.toLocaleString();
+
+            document.getElementById("monthlyKpiValue").textContent =
+                type === "monthly" ? selectedTotal.toLocaleString() : MONTHLY_COUNT.toLocaleString();
+
+            document.getElementById("dailyKpiSub").textContent =
+                type === "daily" ? "Selected day forecast" : "Daily forecast rows";
+
+            document.getElementById("weeklyKpiSub").textContent =
+                type === "weekly" ? "Selected week forecast" : "Weekly forecast rows";
+
+            document.getElementById("monthlyKpiSub").textContent =
+                type === "monthly" ? "Selected month forecast" : "Monthly forecast rows";
+
+            const occupancy = Math.min(99, Math.max(0, Math.round((avgTotal / 1500) * 100)));
+            document.getElementById("avgOccupancyValue").textContent = `${occupancy}%`;
+
+            const riskLabel = document.getElementById("riskKpiLabel");
+            const riskSub = document.getElementById("riskKpiSub");
+
+            if (type === "daily") {
+                const counts = countDailyStatuses(rows);
+                const riskTotal = counts.Warning + counts.Full;
+
+                riskLabel.textContent = "Risk Areas";
+                riskSub.textContent = "Full / Warning status";
+                document.getElementById("riskAreaValue").textContent = riskTotal;
+            } else if (type === "weekly") {
+                const weeklyCounts = countWeeklyLevels(rows);
+
+                riskLabel.textContent = "High Status Count";
+                riskSub.textContent = "High records in next 7 weeks";
+                document.getElementById("riskAreaValue").textContent = weeklyCounts.High;
+            } else {
+                const monthlyCounts = countMonthlyTrends(rows);
+
+                riskLabel.textContent = "Increase Count";
+                riskSub.textContent = "Increase records in next 7 months";
+                document.getElementById("riskAreaValue").textContent = monthlyCounts.Increase;
+            }
+
+            updateRiskAlert(type, rows);
+        }
+
+        function updatePreview(type, rows) {
+            document.getElementById("periodColumn").textContent =
+                type === "daily" ? "Date" : type === "weekly" ? "Week" : "Month";
+
+            document.getElementById("previewTitle").textContent =
+                type === "daily" ? "Forecast Preview (Next 7 Days)" :
+                type === "weekly" ? "Forecast Preview (Next 7 Weeks)" :
+                "Forecast Preview (Next 7 Months)";
+
+            document.getElementById("previewSubtitle").textContent =
+                type === "daily" ? "Selected start date + 7 days" :
+                type === "weekly" ? "Selected start week + 7 weeks" :
+                "Selected start month + 7 months";
+
+            previewBody.innerHTML = "";
+
+            rows.forEach(row => {
+                const tr = document.createElement("tr");
+
+                tr.innerHTML = `
+                    <td>${row.label}</td>
+                    <td>${row.total.toLocaleString()}</td>
+
+                    <td>${row.p1wAvail}</td>
+                    <td>${buildDisplayStatus(type, row, AREA_CONFIG[0])}</td>
+
+                    <td>${row.p1eAvail}</td>
+                    <td>${buildDisplayStatus(type, row, AREA_CONFIG[1])}</td>
+
+                    <td>${row.p2wAvail}</td>
+                    <td>${buildDisplayStatus(type, row, AREA_CONFIG[2])}</td>
+
+                    <td>${row.p2eAvail}</td>
+                    <td>${buildDisplayStatus(type, row, AREA_CONFIG[3])}</td>
+
+                    <td>${row.p3wAvail}</td>
+                    <td>${buildDisplayStatus(type, row, AREA_CONFIG[4])}</td>
+
+                    <td>${row.p3eAvail}</td>
+                    <td>${buildDisplayStatus(type, row, AREA_CONFIG[5])}</td>
+                `;
+
+                previewBody.appendChild(tr);
+            });
+        }
+
+        function updateTrendChart(type, rows) {
+            const labels = rows.map(row => row.label);
+            const values = rows.map(row => row.total);
+
+            document.getElementById("trendSubtitle").textContent =
+                type === "daily" ? "Daily View" : type === "weekly" ? "Weekly View" : "Monthly View";
+
+            if (!trendChart) {
+                trendChart = new Chart(document.getElementById("trendChart"), {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: "Forecast",
+                            data: values,
+                            borderColor: "#E5002B",
+                            backgroundColor: "rgba(229, 0, 43, 0.10)",
+                            pointRadius: 2.5,
+                            pointBackgroundColor: "#102A43",
+                            pointBorderColor: "#FFFFFF",
+                            pointBorderWidth: 1,
+                            tension: 0.35,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                top: 4,
+                                right: 8,
+                                bottom: 0,
+                                left: 2
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    color: "#172033",
+                                    boxWidth: 12,
+                                    font: { size: 10 }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${Math.round(context.parsed.y)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    color: "#667085",
+                                    font: { size: 9 },
+                                    maxRotation: 0,
+                                    minRotation: 0
+                                }
+                            },
+                            y: {
+                                grid: { color: "#E4E7EC" },
+                                ticks: {
+                                    color: "#667085",
+                                    font: { size: 9 },
+                                    callback: function(value) {
+                                        return Math.round(value).toString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                trendChart.data.labels = labels;
+                trendChart.data.datasets[0].data = values;
+                trendChart.update();
+            }
+        }
+
+        function renderDistributionLegend(labels, data, colors) {
+            const legend = document.getElementById("distributionLegend");
+            const total = data.reduce((sum, value) => sum + value, 0);
+
+            legend.innerHTML = labels.map((label, index) => {
+                const pct = percentage(data[index], total);
+                return `
+                    <div class="legend-item">
+                        <span class="dot" style="background:${colors[index]}"></span>
+                        <span>${label}</span>
+                        <strong>${pct}%</strong>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function updateDistributionChart(type, rows) {
+            let labels;
+            let data;
+            let colors;
+
+            if (type === "daily") {
+                const counts = countDailyStatuses(rows);
+
+                labels = ["Normal", "Warning", "Full"];
+                data = [counts.Normal, counts.Warning, counts.Full];
+                colors = ["#159A72", "#F5A400", "#E5002B"];
+
+                document.getElementById("distributionTitle").textContent = "Occupancy Status Distribution";
+                document.getElementById("distributionSubtitle").textContent = "Operational Risk";
+            } else {
+                labels = AREA_CONFIG.map(area => area.code);
+                data = sumAreaPredictions(rows);
+                colors = CONTRIBUTION_COLORS;
+
+                document.getElementById("distributionTitle").textContent =
+                    type === "weekly" ? "Area Contribution Distribution" : "Monthly Area Contribution";
+
+                document.getElementById("distributionSubtitle").textContent =
+                    type === "weekly" ? "Weekly Monitoring" : "Monthly Planning";
+            }
+
+            renderDistributionLegend(labels, data, colors);
+
+            if (!distributionChart) {
+                distributionChart = new Chart(document.getElementById("statusChart"), {
+                    type: "doughnut",
+                    data: {
+                        labels,
+                        datasets: [{
+                            data,
+                            backgroundColor: colors,
+                            borderColor: "#FFFFFF",
+                            borderWidth: 3,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: "66%",
+                        layout: {
+                            padding: 0
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const total = context.dataset.data.reduce((sum, value) => sum + value, 0);
+                                        const value = context.parsed || 0;
+                                        const pct = percentage(value, total);
+                                        return `${context.label}: ${pct}%`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                distributionChart.data.labels = labels;
+                distributionChart.data.datasets[0].data = data;
+                distributionChart.data.datasets[0].backgroundColor = colors;
+                distributionChart.update();
+            }
+        }
+
+        function updateAreaChart(type, rows) {
+            const selected = rows[0];
+            if (!selected) return;
+
+            const labels = AREA_CONFIG.map(area => area.code);
+
+            let chartValues;
+            let barColors;
+            let yMax;
+            let tooltipLabels;
+
+            if (type === "daily") {
+                const availableValues = AREA_CONFIG.map(area => selected[area.avail] || 0);
+                const maxAvailable = Math.max(...availableValues, 1);
+
+                chartValues = availableValues.map(value => Math.round((value / maxAvailable) * 100));
+                barColors = AREA_CONFIG.map(area => getAreaRawStatusColor(selected[area.status]));
+                yMax = 100;
+
+                tooltipLabels = AREA_CONFIG.map((area, index) => {
+                    const status = selected[area.status] || "Normal";
+                    const available = availableValues[index] || 0;
+                    return `${area.code}: ${chartValues[index]}% (${status}, ${available} available)`;
+                });
+            } else if (type === "weekly") {
+                chartValues = getPredictionContributionValues(selected);
+                barColors = AREA_CONFIG.map(area => getAreaLevelColor(getAreaLevel(selected, area)));
+                yMax = Math.max(30, Math.ceil((Math.max(...chartValues, 1) + 5) / 5) * 5);
+
+                tooltipLabels = AREA_CONFIG.map((area, index) => {
+                    const level = getAreaLevel(selected, area);
+                    return `${area.code}: ${chartValues[index]}% contribution (${level})`;
+                });
+            } else {
+                chartValues = getAvailableContributionValues(selected);
+                barColors = AREA_CONFIG.map(area => getMonthlyTrendColor(getMonthlyTrend(selected, area)));
+                yMax = Math.max(30, Math.ceil((Math.max(...chartValues, 1) + 5) / 5) * 5);
+
+                tooltipLabels = AREA_CONFIG.map((area, index) => {
+                    const trend = getMonthlyTrend(selected, area);
+                    return `${area.code}: ${chartValues[index]}% availability contribution (${trend})`;
+                });
+            }
+
+            document.getElementById("areaSubtitle").textContent = `Selected: ${selected.label}`;
+
+            if (!areaChart) {
+                areaChart = new Chart(document.getElementById("areaChart"), {
+                    type: "bar",
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: chartValues,
+                            backgroundColor: barColors,
+                            hoverBackgroundColor: barColors,
+                            borderRadius: 4,
+                            barThickness: 18,
+                            maxBarThickness: 20,
+                            categoryPercentage: 0.44,
+                            barPercentage: 0.58
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                top: 0,
+                                right: 10,
+                                bottom: 0,
+                                left: 0
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return tooltipLabels[context.dataIndex] || "";
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    color: "#667085",
+                                    font: { size: 9 }
+                                }
+                            },
+                            y: {
+                                max: yMax,
+                                grid: { color: "#E4E7EC" },
+                                ticks: {
+                                    color: "#667085",
+                                    font: { size: 9 },
+                                    stepSize: type === "daily" ? 25 : 5,
+                                    callback: value => `${value}%`
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                areaChart.data.labels = labels;
+                areaChart.data.datasets[0].data = chartValues;
+                areaChart.data.datasets[0].backgroundColor = barColors;
+                areaChart.data.datasets[0].hoverBackgroundColor = barColors;
+
+                areaChart.options.scales.y.max = yMax;
+                areaChart.options.scales.y.ticks.stepSize = type === "daily" ? 25 : 5;
+                areaChart.options.plugins.tooltip.callbacks.label = function(context) {
+                    return tooltipLabels[context.dataIndex] || "";
+                };
+
+                areaChart.update();
+            }
+        }
+
+        function updateInsights(type, rows) {
+            if (!rows.length) return;
+
+            const insightTitle = document.getElementById("insightTitle");
+            const insightOneTitle = document.getElementById("insightOneTitle");
+            const insightTwoTitle = document.getElementById("insightTwoTitle");
+            const insightThreeTitle = document.getElementById("insightThreeTitle");
+
+            if (type === "daily") {
+                const counts = countDailyStatuses(rows);
+                const fullTotal = counts.Full;
+                const warningTotal = counts.Warning;
+
+                insightTitle.textContent = "Forecast Insights";
+                insightOneTitle.textContent = "Full Area Count";
+                insightTwoTitle.textContent = "Warning Area Count";
+                insightThreeTitle.textContent = "Recommended Action";
+
+                document.getElementById("peakAreaText").textContent =
+                    `${fullTotal} Full records in next ${rows.length} daily records`;
+
+                document.getElementById("congestionText").textContent =
+                    `${warningTotal} Warning records in next ${rows.length} daily records`;
+
+                if (fullTotal > 0) {
+                    document.getElementById("actionText").textContent =
+                        "Prepare overflow parking and prioritize full areas.";
+                } else if (warningTotal > 0) {
+                    document.getElementById("actionText").textContent =
+                        "Monitor warning areas before they become full.";
+                } else {
+                    document.getElementById("actionText").textContent =
+                        "Parking condition is stable in selected period.";
+                }
+
+                return;
+            }
+
+            if (type === "weekly") {
+                const weeklyCounts = countWeeklyLevels(rows);
+
+                insightTitle.textContent = "Weekly Monitoring Insights";
+                insightOneTitle.textContent = "High Status Count";
+                insightTwoTitle.textContent = "Moderate Status Count";
+                insightThreeTitle.textContent = "Weekly Recommendation";
+
+                document.getElementById("peakAreaText").textContent =
+                    `${weeklyCounts.High} High records in next ${rows.length} weeks`;
+
+                document.getElementById("congestionText").textContent =
+                    `${weeklyCounts.Moderate} Moderate records in next ${rows.length} weeks`;
+
+                document.getElementById("actionText").textContent =
+                    "Review High and Moderate areas in the weekly preview table.";
+
+                return;
+            }
+
+            const monthlyCounts = countMonthlyTrends(rows);
+
+            insightTitle.textContent = "Monthly Planning Insights";
+            insightOneTitle.textContent = "Increase Count";
+            insightTwoTitle.textContent = "Decrease Count";
+            insightThreeTitle.textContent = "Monthly Recommendation";
+
+            document.getElementById("peakAreaText").textContent =
+                `${monthlyCounts.Increase} Increase records in next ${rows.length} months`;
+
+            document.getElementById("congestionText").textContent =
+                `${monthlyCounts.Decrease} Decrease records in next ${rows.length} months`;
+
+            document.getElementById("actionText").textContent =
+                "Review Increase and Decrease trends in the monthly preview table.";
+        }
+
+        function refreshDashboard() {
+            const type = forecastType.value;
+
+            setActiveControls(type);
+
+            const rows = getSelectedWindow(type);
+
+            updateKpi(type, rows);
+            updatePreview(type, rows);
+            updateTrendChart(type, rows);
+            updateDistributionChart(type, rows);
+            updateAreaChart(type, rows);
+            updateInsights(type, rows);
+
+            setTimeout(() => {
+                if (trendChart) trendChart.resize();
+                if (distributionChart) distributionChart.resize();
+                if (areaChart) areaChart.resize();
+            }, 100);
+        }
+
+        function openManagementReport(event) {
+    event.preventDefault();
+
+    const selectedType = forecastType.value;
+    const selectedDate = dailyDatePicker.value;
+    const selectedWeek = weeklySelector.value;
+    const selectedMonth = monthlySelector.value;
+
+    const reportUrl =
+        "{% url 'management_report' %}" +
+        "?type=" + encodeURIComponent(selectedType) +
+        "&date=" + encodeURIComponent(selectedDate) +
+        "&week=" + encodeURIComponent(selectedWeek) +
+        "&month=" + encodeURIComponent(selectedMonth);
+
+    window.open(reportUrl, "_blank");
+}
+
+        forecastType.addEventListener("change", refreshDashboard);
+        dailyDatePicker.addEventListener("change", refreshDashboard);
+        weeklySelector.addEventListener("change", refreshDashboard);
+        monthlySelector.addEventListener("change", refreshDashboard);
+
+        initSelectors();
+        refreshDashboard();
+    </script>
+</body>
+</html>
