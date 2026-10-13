@@ -5,6 +5,13 @@ An enhanced parking management web application that helps admins monitor real-ti
 ## **Overview**
 AI Parking Management System leverages computer vision and machine learning to detect vehicle occupancy from camera feeds in real time. The platform also implements an OCR-based license-plate recognition pipeline to automatically log vehicle entries and exits, and a demand forecasting module that predicts future occupancy trends. Admins manage zones, members, and review flagged plate scans through a dedicated dashboard.
 
+## **Contributor**
+|          Name             |      StudentID      |                Task                  |
+|---------------------------|---------------------|--------------------------------------|
+| Kresnandityo Mahesa Suryo |     001202300068    | License Plate Recognition & Frontend |
+| Kalvin Bernard Kabbi      |     012202300039    |   Forecasting Predictive Analytics   |
+| Kevin Juan Carlos         |     001202300054    |   Parking Slot Occupancy & Backend   |
+
 ## **Features**
 - License Plate Recognition
 - Parking Slot Occupancy
